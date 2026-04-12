@@ -1,0 +1,46 @@
+{
+  "schema": "api/openapi.json",
+  "project": "NocfoApi",
+  "output": "generated",
+  "target": "fsharp-native",
+  "synchronous": false,
+  "asyncReturnType": "async",
+  "resolveReferences": false,
+  "overrideSchema": {
+    "components": {
+      "schemas": {
+        "DocumentList": {
+          "properties": {
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/DocumentRelation"
+              },
+              "nullable": true
+            }
+          }
+        },
+        "DocumentInstance": {
+          "properties": {
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/DocumentRelation"
+              },
+              "nullable": true
+            }
+          }
+        },
+        "AttachmentInstance": {
+          "properties": {
+            "analysis_results": {
+              "type": "string",
+              "nullable": true,
+              "description": "Workaround: Hawaii cannot emit multipart form-data for complex arrays, so this field is downgraded to a plain string placeholder."
+            }
+          }
+        }
+      }
+    }
+  }
+}

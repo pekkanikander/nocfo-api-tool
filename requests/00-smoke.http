@@ -1,0 +1,8 @@
+# 00-smoke.http
+
+@token = {{$processEnv NOCFO_API_TOKEN}}
+
+### Business
+GET {{baseUrl}}/v1/business/
+Authorization: Token {{token}}
+Accept: application/json
