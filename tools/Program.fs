@@ -113,7 +113,8 @@ let listContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedAr
 
 let updateBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs>) =
     async {
-        return 1 // TODO: implement
+        eprintfn "update businesses: not yet implemented"
+        return ExitCodes.EX_SOFTWARE
     }
 
 let foldAccountCommandResults (results: AsyncSeq<Result<AccountResult, DomainError>>) : Async<int> =

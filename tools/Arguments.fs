@@ -20,8 +20,7 @@ type BusinessScopedArgs =
 
 [<RequireSubcommand>]
 type EntitiesArgs =
-    | [< AltCommandLine("-i"); Inherit >]         Fields of fields: string list
-    | [< AltCommandLine("-f"); Inherit >]         Format of format: string
+    | [< AltCommandLine("-f"); Inherit >]         Fields of fields: string list
     | [< NoPrefix; SubCommand >]                  Accounts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Contacts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<BusinessScopedArgs>
@@ -30,7 +29,6 @@ type EntitiesArgs =
         member this.Usage =
             match this with
             | Fields _     -> "Comma-separated list of fields to list/update/... (default: all)."
-            | Format _     -> "Input/outputformat (currently only csv)."
             | Accounts _   -> "Accounts of a business."
             | Contacts _   -> "Contacts of a business."
             | Documents _  -> "Documents of a business."
@@ -58,7 +56,7 @@ type DocumentCreateArgs =
 
 [<RequireSubcommand>]
 type CreateEntitiesArgs =
-    | [< AltCommandLine("-i"); Inherit >]         Fields of fields: string list
+    | [< AltCommandLine("-f"); Inherit >]         Fields of fields: string list
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<DocumentCreateArgs>
     interface IArgParserTemplate with
         member this.Usage =

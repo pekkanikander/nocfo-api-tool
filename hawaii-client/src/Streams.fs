@@ -106,11 +106,3 @@ module Streams =
         source |> streamChanges (fun payload ->
             Http.postJson<'Payload, 'Response> http (getPath payload) payload)
 
-    // TODO: Currently unused. Consider removing.
-    let streamDeletes<'Payload>
-        (http: HttpContext)
-        (getPath: 'Payload -> string)
-        (source: AsyncSeq<'Payload>)
-        : AsyncSeq<Result<unit, HttpError>> =
-        source |> streamChanges (fun payload ->
-            Http.deleteJson<unit> http (getPath payload))

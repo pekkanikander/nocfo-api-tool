@@ -16,10 +16,9 @@ reference only — do not modify them.
 
 ```
 api/                     NoCFO OpenAPI spec (source of truth for regeneration)
-hawaii-client/           The library (used by tools/ and by FSI scripts)
+hawaii-client/           The library (used by tools/)
   generated/             Hawaii-generated code — do NOT hand-edit
   src/                   Hand-written domain, streaming, HTTP, CSV logic
-  *.fsx                  FSI exploration/test scripts (live API)
 tools/                   CLI exe project (depends on hawaii-client)
 vendor/Hawaii/           Local fork of Hawaii generator (git submodule)
 csv/                     Sample and real CSV files from past runs
@@ -68,7 +67,7 @@ v1-typescript/ … v4-fsharp/  Archived failed attempts — read-only
 ## Build Commands
 
 ```bash
-# Build everything (from repo root — uses nocfo.sln)
+# Build everything (from repo root — uses nocfo.slnx)
 dotnet build
 
 # Run all unit tests
@@ -80,9 +79,6 @@ dotnet build tools
 
 # Run the CLI
 dotnet run --project tools -- <args>
-
-# Run an FSI exploration script
-dotnet fsi hawaii-client/TestBalance.fsx
 
 # Regenerate from updated OpenAPI spec
 curl -H "Accept: application/vnd.oai.openapi+json;version=3.0" \
@@ -138,8 +134,7 @@ F# requires declaration-before-use ordering:
 
 ## Known Limitations & TODOs (as of April 2026)
 
-- **No dry-run mode** — mutations execute immediately.
-- **`update businesses` not implemented** (returns TODO exit code).
+- **`update businesses` not implemented** (exits with EX_SOFTWARE).
 - **`create accounts/businesses`** not yet implemented.
 - **Hawaii fork targets net6.0** (EOL) — upstreaming patches is outstanding work.
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
@@ -191,11 +186,8 @@ let result = Account.classify acc
 test <@ result = Some Asset @>
 ```
 
-### 2. Live FSI scripts (`hawaii-client/*.fsx`)
+### 2. Live FSI scripts
 
-Run against `api-tst.nocfo.io`. Require `NOCFO_TOKEN`.
-
-Safe-to-run (read-only): `TestClient`, `TestPatchShape`, `TestAlignAccountsPermissive`,
-`TestCsvReadDeltas`, `TestBalance`.
-
-Mutating: `TestStreams`, `TestAccountUpdates`, `TestCreate*`.
+The exploration repo (`nocfo-api-onboard`) contained FSI scripts for manual testing
+against `api-tst.nocfo.io`. They were not migrated to this repo. If needed, port from
+the archive or write new ones here.

@@ -5,7 +5,7 @@ The pattern is settled; this roadmap fills in the gaps that were consciously def
 
 ---
 
-## Phase 1 — Solid Foundation (do before anything else)
+## Phase 1 — Solid Foundation (do before anything else) - DONE
 
 Goal: make the existing functionality reliable and testable so it is safe to carry forward.
 
@@ -22,7 +22,7 @@ File: `hawaii-client/src/Http.fs`
 Why first: everything else depends on reliable HTTP. Without this, any unattended run
 against a slightly flaky API is a gamble.
 
-### 1.2 Unit test project for pure modules
+### 1.2 Unit test project for pure modules - Done
 
 New project: `tests/tests.fsproj` (xUnit)
 
@@ -35,12 +35,12 @@ Priority targets (all pure F#, no API access needed):
 Why now: before migrating to a new repo, we want a test gate that catches regressions.
 These tests will also document the invariants of the core library.
 
-### 1.3 Create top level `.fsproj`
+### 1.3 Create top level `.slnx` — Done
 
-Create a top level `.fsproj` file so that both `dotnet build` works (currently it doesn't)
+Create a top level `.slnx` file so that both `dotnet build` works (currently it doesn't)
 and that running all the tests in `tests` can be done according to the current best F# practices.
 
-### 1.4 Migrate to a new clean repository
+### 1.4 Migrate to a new clean repository — Done
 
 The current repo carries four failed iterations (v1-v4), many exploratory FSI scripts,
 and a git history that reflects experimentation rather than a product.
@@ -78,7 +78,7 @@ Steps:
 
 ### 2.1 Dry-run mode
 
-Flag: `--dry-run` on all mutating commands (`update`, `create`, `delete`, `map`)
+Flag: `--dry-run` on all mutating commands (`update`, `create`, `delete`)
 
 Implementation: pass a `dryRun: bool` into `streamChanges`, `streamPatches`,
 `streamCreates` in `Streams.fs`; log the intended operation instead of executing it.
