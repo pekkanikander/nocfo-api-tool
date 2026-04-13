@@ -106,6 +106,29 @@ Argu supports layered config; this mostly needs plumbing in `Tools.fs` and `Tool
 
 Why: juggling multiple env vars for cross-environment operations is fragile and error-prone.
 
+### 2.3 Domain module de-duplication (SRTP genericisation)
+
+File: `hawaii-client/src/Domain.fs`
+
+The `Account` and `Contact` modules contain near-identical implementations of
+`fetchFull`, `diffToPatch`, `deltasToCommands`, and `executeDeltaUpdates`.
+The same pattern will repeat verbatim for every new entity type.
+
+Collapse these into generic SRTP `inline` helpers (or regular generic functions taking
+endpoint builders and type parameters), so adding a new entity requires only its type
+definitions and a few lines of wiring — not a wholesale copy of ~100 lines per entity.
+
+Priority targets (in order):
+
+1. `fetchFull` → generic `fetchEntityById`
+2. `diffToPatch` → generic `diffEntity`
+3. `executeDeltaUpdates` → generic (the `handlePatch` lambda is the only variable part)
+4. `deltasToCommands` → generic (alignment strategy is the only variable part)
+5. `Streams.executeAccountCommands` / `executeContactCommands` → single generic `executeCommands`
+
+This aligns with the SRTP architectural direction described at the end of this roadmap.
+Do this before adding further entity types to avoid locking in the verbose per-entity pattern.
+
 ---
 
 ## Phase 3 — Distribution (remove the "needs .NET SDK" barrier)
