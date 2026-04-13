@@ -76,7 +76,7 @@ Steps:
 
 ## Phase 2 — Usability (make it safe and convenient to run)
 
-### 2.1 Dry-run mode
+### 2.1 Dry-run mode — Done
 
 Flag: `--dry-run` on all mutating commands (`update`, `create`, `delete`)
 

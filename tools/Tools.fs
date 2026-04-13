@@ -63,9 +63,9 @@ module Runtime =
             | InvalidUri (name, value) ->
                 $"Environment variable {name} must be an absolute URI (value: {value})."
 
-        let createContext (cfg: ToolConfig) (input: TextReader) (output: TextWriter) : ToolContext =
+        let createContext (cfg: ToolConfig) (input: TextReader) (output: TextWriter) (dryRun: bool) : ToolContext =
             let httpContext = Http.createHttpContext cfg.BaseUrl cfg.Token
-            let accounting = Accounting.ofHttp httpContext
+            let accounting = Accounting.ofHttp httpContext dryRun
             { Config = cfg; Accounting = accounting; Input = input; Output = output }
 
         let fromEnvironment () =
@@ -121,9 +121,9 @@ module Runtime =
                     ]
                 Error errors
 
-        let loadOrFail (input: TextReader) (output: TextWriter): ToolContext =
+        let loadOrFail (input: TextReader) (output: TextWriter) (dryRun: bool): ToolContext =
             match fromEnvironment () with
-            | Ok cfg -> createContext cfg input output
+            | Ok cfg -> createContext cfg input output dryRun
             | Error errors ->
                 let errorMessages = errors |> List.map describeError |> String.concat "\n"
                 failwith $"Tool configuration failed: {errorMessages}"

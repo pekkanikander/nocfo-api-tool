@@ -66,18 +66,20 @@ type CreateEntitiesArgs =
 
 [<RequireSubcommand>]
 type CliArgs =
-    | [< AltCommandLine("-o") >]                  Out    of outPath: string
-    | [< AltCommandLine("-i") >]                  In     of inPath: string
-    | [< NoPrefix; SubCommand >]                  List   of ParseResults<EntitiesArgs>
-    | [< NoPrefix; SubCommand >]                  Update of ParseResults<EntitiesArgs>
-    | [< NoPrefix; SubCommand >]                  Delete of ParseResults<EntitiesArgs>
-    | [< NoPrefix; SubCommand >]                  Map    of ParseResults<MapEntitiesArgs>
-    | [< NoPrefix; SubCommand >]                  Create of ParseResults<CreateEntitiesArgs>
+    | [< AltCommandLine("-o") >]                  Out     of outPath: string
+    | [< AltCommandLine("-i") >]                  In      of inPath: string
+    | [< AltCommandLine("-n") >]                  DryRun
+    | [< NoPrefix; SubCommand >]                  List    of ParseResults<EntitiesArgs>
+    | [< NoPrefix; SubCommand >]                  Update  of ParseResults<EntitiesArgs>
+    | [< NoPrefix; SubCommand >]                  Delete  of ParseResults<EntitiesArgs>
+    | [< NoPrefix; SubCommand >]                  Map     of ParseResults<MapEntitiesArgs>
+    | [< NoPrefix; SubCommand >]                  Create  of ParseResults<CreateEntitiesArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Out _        -> "Optional CSV output path (default stdout)."
             | In _         -> "Optional CSV input path (default stdin)."
+            | DryRun       -> "Print what would be done without executing any mutations."
             | List _       -> "List entities (businesses, accounts, etc.)."
             | Update _     -> "Update an entity (business, account, etc.)."
             | Delete _     -> "Delete entities (accounts, etc.)."

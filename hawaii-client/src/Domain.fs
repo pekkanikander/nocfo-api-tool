@@ -222,12 +222,15 @@ module Alignment =
 
 module DeltaUpdate =
 
-  let execute<'Delta, 'Full, 'Patch, 'Result>
-    (getId: 'Delta -> int)
-    (fetchCurrent: int -> Async<Result<'Full, DomainError>>)
-    (diffToPatch: 'Full -> 'Delta -> Result<'Patch option, DomainError>)
-    (applyPatch: int -> 'Patch -> Async<Result<'Result, DomainError>>)
-    (deltas: AsyncSeq<Result<'Delta, DomainError>>)
+  /// Core loop: fetch current state, diff, then call `handlePatch`.
+  /// `handlePatch` returns `Ok (Some result)` on success, `Ok None` to skip silently
+  /// (used for dry-run), or `Error` to propagate a failure.
+  let run<'Delta, 'Full, 'Patch, 'Result>
+    (getId        : 'Delta -> int)
+    (fetchCurrent : int -> Async<Result<'Full, DomainError>>)
+    (diffToPatch  : 'Full -> 'Delta -> Result<'Patch option, DomainError>)
+    (handlePatch  : int -> 'Patch -> Async<Result<'Result option, DomainError>>)
+    (deltas       : AsyncSeq<Result<'Delta, DomainError>>)
     : AsyncSeq<Result<'Result, DomainError>> =
 
     asyncSeq {
@@ -248,8 +251,11 @@ module DeltaUpdate =
                 | Ok None ->
                     ()
                 | Ok (Some patch) ->
-                    let! patchResult = applyPatch id patch
-                    yield patchResult
+                    let! result = handlePatch id patch
+                    match result with
+                    | Error err        -> yield Error err
+                    | Ok (Some value)  -> yield Ok value
+                    | Ok None          -> ()
     }
 
 
@@ -266,6 +272,7 @@ type AccountingOptions = {
   retryPolicy:   Option<unit> // XXX: Not implemented yet
   loggingPolicy: Option<unit> // XXX: Not implemented yet
   cachingPolicy: Option<unit> // XXX: Not implemented yet
+  dryRun: bool
 }
 
 type AccountingContext = {
@@ -286,7 +293,7 @@ type BusinessContext = {
 /// ------------------------------------------------------------
 
 module Accounting =
-  let ofHttp (http: HttpContext) : AccountingContext =
+  let ofHttp (http: HttpContext) (dryRun: bool) : AccountingContext =
     {
       http = http
       options = {
@@ -294,6 +301,7 @@ module Accounting =
         retryPolicy   = None
         loggingPolicy = None
         cachingPolicy = None
+        dryRun        = dryRun
       }
     }
 
@@ -438,16 +446,21 @@ module Account =
     (deltas: AsyncSeq<Result<AccountDelta, DomainError>>)
     : AsyncSeq<Result<AccountResult, DomainError>> =
 
-    let applyPatch id patch =
-      Http.patchJson<PatchedAccountRequest, AccountFull> context.ctx.http (Endpoints.accountById context.key.slug (string id)) patch
-      |> AsyncResult.mapError DomainError.Http
-      |> AsyncResult.map AccountUpdated
+    let url id = Endpoints.accountById context.key.slug (string id)
+    let handlePatch id patch =
+      if context.ctx.options.dryRun then async {
+        eprintfn "[dry-run] PATCH %s %s" (url id) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
+        return Ok None
+      } else
+        Http.patchJson<PatchedAccountRequest, AccountFull> context.ctx.http (url id) patch
+        |> AsyncResult.mapError DomainError.Http
+        |> AsyncResult.map (AccountUpdated >> Some)
 
-    DeltaUpdate.execute
+    DeltaUpdate.run
       (fun (delta: AccountDelta) -> delta.id)
       (fetchFull context)
       diffToPatch
-      applyPatch
+      handlePatch
       deltas
 
 ///
@@ -542,16 +555,21 @@ module Contact =
     (deltas: AsyncSeq<Result<ContactDelta, DomainError>>)
     : AsyncSeq<Result<ContactResult, DomainError>> =
 
-    let applyPatch id patch =
-      Http.patchJson<PatchedContactRequest, ContactFull> context.ctx.http (Endpoints.contactById context.key.slug (string id)) patch
-      |> AsyncResult.mapError DomainError.Http
-      |> AsyncResult.map ContactUpdated
+    let url id = Endpoints.contactById context.key.slug (string id)
+    let handlePatch id patch =
+      if context.ctx.options.dryRun then async {
+        eprintfn "[dry-run] PATCH %s %s" (url id) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
+        return Ok None
+      } else
+        Http.patchJson<PatchedContactRequest, ContactFull> context.ctx.http (url id) patch
+        |> AsyncResult.mapError DomainError.Http
+        |> AsyncResult.map (ContactUpdated >> Some)
 
-    DeltaUpdate.execute
+    DeltaUpdate.run
       (fun (delta: ContactDelta) -> delta.id)
       (fetchFull context)
       diffToPatch
-      applyPatch
+      handlePatch
       deltas
 
 ///
@@ -565,6 +583,19 @@ module Streams =
     |> AsyncSeq.map (function
         | Ok value -> Ok value
         | Error err -> Error (DomainError.Http err))
+
+  /// Dry-run helper for command streams: logs each command and yields nothing.
+  /// 'Result is phantom — no Ok value is ever yielded.
+  let private dryRunCommands<'Command, 'Result>
+    (describe: 'Command -> string)
+    (commands: AsyncSeq<Result<'Command, DomainError>>)
+    : AsyncSeq<Result<'Result, DomainError>> =
+    asyncSeq {
+      for result in commands do
+        match result with
+        | Error err -> yield Error err
+        | Ok command -> eprintfn "[dry-run] %s" (describe command)
+    }
 
   /// Convert a raw stream into a domain stream
   let toDomain< 'Dom, 'Raw >
@@ -627,6 +658,19 @@ module Streams =
     (commands: AsyncSeq<Result<AccountCommand, DomainError>>)
     : AsyncSeq<Result<AccountResult, DomainError>> =
 
+    if context.ctx.options.dryRun then
+      dryRunCommands
+        (function
+         | AccountCommand.UpdateAccount delta ->
+             sprintf "PATCH %s %s"
+               (Endpoints.accountById context.key.slug (string delta.id))
+               (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
+         | AccountCommand.DeleteAccount id ->
+             sprintf "DELETE %s" (Endpoints.accountById context.key.slug (string id))
+         | AccountCommand.CreateAccount _ -> "POST (create account not yet implemented)")
+        commands
+    else
+
     let deletePath (accountId: int) =
       Endpoints.accountById context.key.slug (string accountId)
 
@@ -660,6 +704,18 @@ module Streams =
     (context: BusinessContext)
     (commands: AsyncSeq<Result<DocumentCommand, DomainError>>)
     : AsyncSeq<Result<DocumentResult, DomainError>> =
+
+    if context.ctx.options.dryRun then
+      dryRunCommands
+        (function
+         | DocumentCommand.CreateDocument payload ->
+             sprintf "POST %s %s"
+               (Endpoints.documentsBySlug context.key.slug)
+               (Newtonsoft.Json.JsonConvert.SerializeObject payload)
+         | DocumentCommand.DeleteDocument id ->
+             sprintf "DELETE %s" (Endpoints.documentById context.key.slug (string id)))
+        commands
+    else
 
     let createPath =
       Endpoints.documentsBySlug context.key.slug
@@ -695,6 +751,18 @@ module Streams =
     (context: BusinessContext)
     (commands: AsyncSeq<Result<ContactCommand, DomainError>>)
     : AsyncSeq<Result<ContactResult, DomainError>> =
+
+    if context.ctx.options.dryRun then
+      dryRunCommands
+        (function
+         | ContactCommand.UpdateContact delta ->
+             sprintf "PATCH %s %s"
+               (Endpoints.contactById context.key.slug (string delta.id))
+               (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
+         | ContactCommand.DeleteContact id ->
+             sprintf "DELETE %s" (Endpoints.contactById context.key.slug (string id)))
+        commands
+    else
 
     let patchPath (contactId: int) =
       Endpoints.contactById context.key.slug (string contactId)

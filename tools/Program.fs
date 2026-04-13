@@ -357,7 +357,7 @@ let private getSourceAccounting (cfg: ToolConfig) =
     match cfg.SourceToken with
     | Some sourceToken ->
         let sourceHttp = NocfoClient.Http.createHttpContext cfg.SourceBaseUrl sourceToken
-        Ok (Accounting.ofHttp sourceHttp)
+        Ok (Accounting.ofHttp sourceHttp false)
     | None ->
         Error "Missing required environment variable NOCFO_SOURCE_TOKEN for `map accounts`."
 
@@ -612,7 +612,8 @@ let main argv =
             | None -> Console.Out
 
         try
-            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail input output
+            let dryRun = results.Contains(CliArgs.DryRun)
+            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail input output dryRun
 
             let subcommand = results.GetSubCommand()
             return!
