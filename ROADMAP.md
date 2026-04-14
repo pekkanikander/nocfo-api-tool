@@ -106,7 +106,7 @@ Argu supports layered config; this mostly needs plumbing in `Tools.fs` and `Tool
 
 Why: juggling multiple env vars for cross-environment operations is fragile and error-prone.
 
-### 2.3 Domain module de-duplication (SRTP genericisation)
+### 2.3 Domain module de-duplication (SRTP genericisation) — Done
 
 File: `hawaii-client/src/Domain.fs`
 

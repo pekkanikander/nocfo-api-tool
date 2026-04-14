@@ -197,28 +197,6 @@ module Alignment =
           yield Error err
     }
 
-  // New behaviour, allow CSV file to have missing rows.
-  let alignAccountsPermissive
-    (accounts: AsyncSeq<Result<AccountFull, DomainError>>)
-    (deltas  : AsyncSeq<Result<AccountDelta, DomainError>>)
-    =
-
-    let onAligned (account: AccountFull) (delta: AccountDelta) =
-      Ok (Some (account, delta))
-
-    // MissingLeft: we have a delta (CSV row) but no matching account from API -> still an error.
-    let onMissingLeft (missingDelta: AccountDelta) =
-      let key = missingDelta.id
-      Error (DomainError.Unexpected $"Alignment failure: missing account for CSV id {key}.")
-
-    // MissingRight: we have an account from API but no matching CSV row -> allowed, delta = None.
-    let onMissingRight (_missingAccount: AccountFull) =
-      Ok None
-
-    alignEntries<AccountFull, AccountDelta, int, Option<AccountFull * AccountDelta>>
-      (fun account -> account.id)
-      (fun delta -> delta.id)
-      onAligned onMissingLeft onMissingRight accounts deltas
 
 module DeltaUpdate =
 
@@ -306,6 +284,95 @@ module Accounting =
     }
 
 ///
+/// Generic entity operation helpers — shared across Account, Contact, etc.
+///
+
+module EntityOps =
+
+  /// Fetch a single entity by integer id, mapping NotFound to a domain error.
+  let fetchById<'Full>
+    (endpoint   : string -> string -> string)
+    (missingErr : int -> DomainError)
+    (context    : BusinessContext)
+    (id         : int)
+    : Async<Result<'Full, DomainError>> =
+    async {
+      let! result = Http.getJson<'Full> context.ctx.http (endpoint context.key.slug (string id))
+      match result with
+      | Ok full                           -> return Ok full
+      | Error (NotFound _) -> return Error (missingErr id)
+      | Error err                         -> return Error (DomainError.Http err)
+    }
+
+  /// Diff a delta against its current full state, producing a normalised patch or None.
+  let diffToPatch<'Full, 'Delta, 'Patch>
+    (entityName   : string)
+    (getFullId    : 'Full  -> int)
+    (getDeltaId   : 'Delta -> int)
+    (getDeltaPatch: 'Delta -> 'Patch)
+    (full         : 'Full)
+    (delta        : 'Delta)
+    : Result<'Patch option, DomainError> =
+    let id = getDeltaId delta
+    if id <> getFullId full then
+      Error (DomainError.Unexpected
+               $"Patched {entityName} id {id} does not match hydrated {entityName} id {getFullId full}.")
+    else
+      let normalised = PatchShape<'Full, 'Patch>.Normalize(full, getDeltaPatch delta)
+      if PatchShape<'Full, 'Patch>.HasChanges normalised then Ok (Some normalised)
+      else Ok None
+
+  /// Align a paginated API stream against a CSV delta stream and produce commands.
+  /// Permissive policy: CSV-only row → error; API-only row → skip.
+  let deltasToCommands<'Full, 'Delta, 'Command>
+    (getFullId   : 'Full  -> int)
+    (getDeltaId  : 'Delta -> int)
+    (entityLabel : string)
+    (diff        : 'Full -> 'Delta -> Result<'Command option, DomainError>)
+    (fulls       : AsyncSeq<Result<'Full,  DomainError>>)
+    (deltas      : AsyncSeq<Result<'Delta, DomainError>>)
+    : AsyncSeq<Result<'Command, DomainError>> =
+
+    Alignment.alignEntries
+      getFullId getDeltaId
+      (fun full delta -> Ok (Some (full, delta)))
+      (fun missing    -> Error (DomainError.Unexpected
+                                  $"Alignment failure: missing {entityLabel} for CSV id {getDeltaId missing}."))
+      (fun _          -> Ok None)
+      fulls deltas
+    |> AsyncSeq.collect (function
+        | Error err               -> AsyncSeq.singleton (Error err)
+        | Ok None                 -> AsyncSeq.empty
+        | Ok (Some (full, delta)) ->
+            match diff full delta with
+            | Ok (Some cmd) -> AsyncSeq.singleton (Ok cmd)
+            | Ok None       -> AsyncSeq.empty
+            | Error err     -> AsyncSeq.singleton (Error err))
+
+  /// Core delta-update runner: fetch current state, diff, PATCH if changed.
+  let executeDeltaUpdates<'Delta, 'Full, 'Patch, 'Result>
+    (endpointOf  : string -> string -> string)
+    (wrapUpdated : 'Full -> 'Result)
+    (context     : BusinessContext)
+    (fetchFull   : BusinessContext -> int -> Async<Result<'Full, DomainError>>)
+    (diff        : 'Full -> 'Delta -> Result<'Patch option, DomainError>)
+    (getDeltaId  : 'Delta -> int)
+    (deltas      : AsyncSeq<Result<'Delta, DomainError>>)
+    : AsyncSeq<Result<'Result, DomainError>> =
+
+    let url id = endpointOf context.key.slug (string id)
+    let handlePatch id patch =
+      if context.ctx.options.dryRun then async {
+        eprintfn "[dry-run] PATCH %s %s" (url id) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
+        return Ok None
+      } else
+        Http.patchJson<'Patch, 'Full> context.ctx.http (url id) patch
+        |> AsyncResult.mapError DomainError.Http
+        |> AsyncResult.map (wrapUpdated >> Some)
+
+    DeltaUpdate.run getDeltaId (fetchFull context) diff handlePatch deltas
+
+///
 /// Business module operations
 ///
 
@@ -356,18 +423,7 @@ module Account =
         return (Result.map (Account.Full) >> DomainError.asDomain) result
       }
 
-  let fetchFull (context: BusinessContext) (id: int) : Async<Result<AccountFull, DomainError>> =
-    async {
-      let! result =
-        Http.getJson<AccountFull> context.ctx.http (Endpoints.accountById context.key.slug (string id))
-      match result with
-      | Ok account ->
-          return Ok account
-      | Error (Http.HttpError.NotFound _) ->
-          return Error (missingAccountError id)
-      | Error err ->
-          return Error (DomainError.Http err)
-    }
+  let fetchFull = EntityOps.fetchById Endpoints.accountById missingAccountError
 
   let ofRow (context: BusinessContext) (row: AccountRow) : Account =
     Hydratable.Partial (row, fetch = mkFetch context (row.id.ToString()))
@@ -404,64 +460,22 @@ module Account =
     | Some Type92dEnum.EXP_TAX_PRE -> Some Expense
     | None  -> None
 
-  let diffAccount (full: AccountFull) (patched: AccountDelta) : Result<AccountCommand option, DomainError> =
-    let id = patched.id
-    if id <> full.id then
-      Error (DomainError.Unexpected $"Patched account id {id} does not match hydrated account id {full.id}.")
-    else
-      let normalized = PatchShape<AccountFull, PatchedAccountRequest>.Normalize(full, patched.patch)
-      if PatchShape<AccountFull, PatchedAccountRequest>.HasChanges normalized then
-        Ok (Some (AccountCommand.UpdateAccount { id = id; patch = normalized }))
-      else
-        Ok None
+  let diffToPatch : AccountFull -> AccountDelta -> Result<PatchedAccountRequest option, DomainError> =
+    EntityOps.diffToPatch "account" (fun a -> a.id) (fun d -> d.id) (fun d -> d.patch)
 
-  let diffToPatch (full: AccountFull) (patched: AccountDelta) : Result<PatchedAccountRequest option, DomainError> =
-    let id = patched.id
-    if id <> full.id then
-      Error (DomainError.Unexpected $"Patched account id {id} does not match hydrated account id {full.id}.")
-    else
-      let normalized = PatchShape<AccountFull, PatchedAccountRequest>.Normalize(full, patched.patch)
-      if PatchShape<AccountFull, PatchedAccountRequest>.HasChanges normalized then
-        Ok (Some normalized)
-      else
-        Ok None
+  let diffAccount (full: AccountFull) (delta: AccountDelta) : Result<AccountCommand option, DomainError> =
+    diffToPatch full delta
+    |> Result.map (Option.map (fun patch -> UpdateAccount { id = delta.id; patch = patch }))
 
   let deltasToCommands
-    (accounts: AsyncSeq<Result<AccountFull, DomainError>>)
-    (deltas: AsyncSeq<Result<AccountDelta, DomainError>>)
+    (accounts : AsyncSeq<Result<AccountFull,  DomainError>>)
+    (deltas   : AsyncSeq<Result<AccountDelta, DomainError>>)
     : AsyncSeq<Result<AccountCommand, DomainError>> =
+    EntityOps.deltasToCommands (fun (a: AccountFull) -> a.id) (fun (d: AccountDelta) -> d.id) "account" diffAccount accounts deltas
 
-    Alignment.alignAccountsPermissive accounts deltas
-    |> AsyncSeq.collect (function
-        | Error err -> AsyncSeq.singleton (Error err)
-        | Ok None -> AsyncSeq.empty // No matching account from API -> no command.
-        | Ok (Some (account, delta)) ->
-            match diffAccount account delta with
-            | Ok (Some command) -> AsyncSeq.singleton (Ok command)
-            | Ok None -> AsyncSeq.empty // No changes -> no command.
-            | Error err -> AsyncSeq.singleton (Error err))
-
-  let executeDeltaUpdates
-    (context: BusinessContext)
-    (deltas: AsyncSeq<Result<AccountDelta, DomainError>>)
-    : AsyncSeq<Result<AccountResult, DomainError>> =
-
-    let url id = Endpoints.accountById context.key.slug (string id)
-    let handlePatch id patch =
-      if context.ctx.options.dryRun then async {
-        eprintfn "[dry-run] PATCH %s %s" (url id) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
-        return Ok None
-      } else
-        Http.patchJson<PatchedAccountRequest, AccountFull> context.ctx.http (url id) patch
-        |> AsyncResult.mapError DomainError.Http
-        |> AsyncResult.map (AccountUpdated >> Some)
-
-    DeltaUpdate.run
-      (fun (delta: AccountDelta) -> delta.id)
-      (fetchFull context)
-      diffToPatch
-      handlePatch
-      deltas
+  let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<AccountDelta, DomainError>>) =
+    EntityOps.executeDeltaUpdates
+      Endpoints.accountById AccountUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
 
 ///
 /// Document module operations
@@ -492,85 +506,24 @@ module Contact =
     | Full _ -> async.Return (Ok contact)
     | Partial (_row, fetch) -> fetch ()
 
-  let fetchFull (context: BusinessContext) (id: int) : Async<Result<ContactFull, DomainError>> =
-    async {
-      let! result =
-        Http.getJson<ContactFull> context.ctx.http (Endpoints.contactById context.key.slug (string id))
-      match result with
-      | Ok contact ->
-          return Ok contact
-      | Error (Http.HttpError.NotFound _) ->
-          return Error (missingContactError id)
-      | Error err ->
-          return Error (DomainError.Http err)
-    }
+  let fetchFull = EntityOps.fetchById Endpoints.contactById missingContactError
 
-  let diffContact (full: ContactFull) (patched: ContactDelta) : Result<ContactCommand option, DomainError> =
-    let id = patched.id
-    if id <> full.id then
-      Error (DomainError.Unexpected $"Patched contact id {id} does not match hydrated contact id {full.id}.")
-    else
-      let normalized = PatchShape<ContactFull, PatchedContactRequest>.Normalize(full, patched.patch)
-      if PatchShape<ContactFull, PatchedContactRequest>.HasChanges normalized then
-        Ok (Some (ContactCommand.UpdateContact { id = id; patch = normalized }))
-      else
-        Ok None
+  let diffToPatch : ContactFull -> ContactDelta -> Result<PatchedContactRequest option, DomainError> =
+    EntityOps.diffToPatch "contact" (fun c -> c.id) (fun d -> d.id) (fun d -> d.patch)
 
-  let diffToPatch (full: ContactFull) (patched: ContactDelta) : Result<PatchedContactRequest option, DomainError> =
-    let id = patched.id
-    if id <> full.id then
-      Error (DomainError.Unexpected $"Patched contact id {id} does not match hydrated contact id {full.id}.")
-    else
-      let normalized = PatchShape<ContactFull, PatchedContactRequest>.Normalize(full, patched.patch)
-      if PatchShape<ContactFull, PatchedContactRequest>.HasChanges normalized then
-        Ok (Some normalized)
-      else
-        Ok None
+  let diffContact (full: ContactFull) (delta: ContactDelta) : Result<ContactCommand option, DomainError> =
+    diffToPatch full delta
+    |> Result.map (Option.map (fun patch -> UpdateContact { id = delta.id; patch = patch }))
 
   let deltasToCommands
-    (contacts: AsyncSeq<Result<ContactFull, DomainError>>)
-    (deltas: AsyncSeq<Result<ContactDelta, DomainError>>)
+    (contacts : AsyncSeq<Result<ContactFull,  DomainError>>)
+    (deltas   : AsyncSeq<Result<ContactDelta, DomainError>>)
     : AsyncSeq<Result<ContactCommand, DomainError>> =
+    EntityOps.deltasToCommands (fun (c: ContactFull) -> c.id) (fun (d: ContactDelta) -> d.id) "contact" diffContact contacts deltas
 
-    Alignment.alignEntries<ContactFull, ContactDelta, int, Option<ContactFull * ContactDelta>>
-      (fun contact -> contact.id)
-      (fun delta -> delta.id)
-      (fun contact delta -> Ok (Some (contact, delta)))
-      (fun missingDelta ->
-        Error (DomainError.Unexpected $"Alignment failure: missing contact for CSV id {missingDelta.id}."))
-      (fun _missingContact -> Ok None)
-      contacts
-      deltas
-    |> AsyncSeq.collect (function
-        | Error err -> AsyncSeq.singleton (Error err)
-        | Ok None -> AsyncSeq.empty // No matching CSV row for this API contact -> no command.
-        | Ok (Some (contact, delta)) ->
-            match diffContact contact delta with
-            | Ok (Some command) -> AsyncSeq.singleton (Ok command)
-            | Ok None -> AsyncSeq.empty // No changes -> no command.
-            | Error err -> AsyncSeq.singleton (Error err))
-
-  let executeDeltaUpdates
-    (context: BusinessContext)
-    (deltas: AsyncSeq<Result<ContactDelta, DomainError>>)
-    : AsyncSeq<Result<ContactResult, DomainError>> =
-
-    let url id = Endpoints.contactById context.key.slug (string id)
-    let handlePatch id patch =
-      if context.ctx.options.dryRun then async {
-        eprintfn "[dry-run] PATCH %s %s" (url id) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
-        return Ok None
-      } else
-        Http.patchJson<PatchedContactRequest, ContactFull> context.ctx.http (url id) patch
-        |> AsyncResult.mapError DomainError.Http
-        |> AsyncResult.map (ContactUpdated >> Some)
-
-    DeltaUpdate.run
-      (fun (delta: ContactDelta) -> delta.id)
-      (fetchFull context)
-      diffToPatch
-      handlePatch
-      deltas
+  let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<ContactDelta, DomainError>>) =
+    EntityOps.executeDeltaUpdates
+      Endpoints.contactById ContactUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
 
 ///
 /// Streams module operations —— maybe to be folded to the previous modules
@@ -653,146 +606,107 @@ module Streams =
             | Ok (Partial _) -> return Error (DomainError.Unexpected "Entity could not be hydrated")
       })
 
+  let private executeCommands<'Command, 'Result>
+    (context        : BusinessContext)
+    (formatDryRun   : 'Command -> string)
+    (mapToOperation : 'Command -> unit -> Async<Result<'Result, Http.HttpError>>)
+    (commands       : AsyncSeq<Result<'Command, DomainError>>)
+    : AsyncSeq<Result<'Result, DomainError>> =
+    if context.ctx.options.dryRun then
+      dryRunCommands formatDryRun commands
+    else
+      asyncSeq {
+        try
+          yield!
+            commands
+            |> AsyncSeqResult.unwrapOrThrow
+            |> AsyncSeq.map mapToOperation
+            |> NocfoClient.Streams.streamChanges (fun op -> op ())
+            |> mapHttpError
+        with
+        | DomainStreamException err -> yield Error err
+      }
+
   let executeAccountCommands
     (context: BusinessContext)
     (commands: AsyncSeq<Result<AccountCommand, DomainError>>)
     : AsyncSeq<Result<AccountResult, DomainError>> =
 
-    if context.ctx.options.dryRun then
-      dryRunCommands
-        (function
-         | AccountCommand.UpdateAccount delta ->
-             sprintf "PATCH %s %s"
-               (Endpoints.accountById context.key.slug (string delta.id))
-               (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
-         | AccountCommand.DeleteAccount id ->
-             sprintf "DELETE %s" (Endpoints.accountById context.key.slug (string id))
-         | AccountCommand.CreateAccount _ -> "POST (create account not yet implemented)")
-        commands
-    else
-
-    let deletePath (accountId: int) =
-      Endpoints.accountById context.key.slug (string accountId)
-
-    let mapCommandToOperation (command: AccountCommand) =
-      match command with
+    let formatDryRun = function
       | AccountCommand.UpdateAccount delta ->
-          (fun () ->
-                Http.patchJson<NocfoApi.Types.PatchedAccountRequest, AccountFull> context.ctx.http (Endpoints.accountById context.key.slug (string delta.id)) delta.patch
-                |> AsyncResult.map AccountUpdated)
+          sprintf "PATCH %s %s"
+            (Endpoints.accountById context.key.slug (string delta.id))
+            (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
       | AccountCommand.DeleteAccount id ->
-          (fun () ->
-                Http.deleteJson<unit> context.ctx.http (deletePath id)
-                |> AsyncResult.map (fun () -> AccountDeleted id))
+          sprintf "DELETE %s" (Endpoints.accountById context.key.slug (string id))
+      | AccountCommand.CreateAccount _ -> "POST (create account not yet implemented)"
+
+    let mapToOperation = function
+      | AccountCommand.UpdateAccount delta ->
+          fun () ->
+            Http.patchJson<PatchedAccountRequest, AccountFull>
+              context.ctx.http (Endpoints.accountById context.key.slug (string delta.id)) delta.patch
+            |> AsyncResult.map AccountUpdated
+      | AccountCommand.DeleteAccount id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.accountById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> AccountDeleted id)
       | AccountCommand.CreateAccount _ ->
           raise (DomainStreamException (DomainError.Unexpected "CreateAccount is not supported yet."))
 
-    asyncSeq {
-      try
-        yield!
-          commands
-          |> AsyncSeqResult.unwrapOrThrow
-          |> AsyncSeq.map mapCommandToOperation
-          |> NocfoClient.Streams.streamChanges (fun op -> op ())
-          |> mapHttpError
-      with
-      | DomainStreamException err ->
-          yield Error err
-    }
+    executeCommands context formatDryRun mapToOperation commands
 
   let executeDocumentCommands
     (context: BusinessContext)
     (commands: AsyncSeq<Result<DocumentCommand, DomainError>>)
     : AsyncSeq<Result<DocumentResult, DomainError>> =
 
-    if context.ctx.options.dryRun then
-      dryRunCommands
-        (function
-         | DocumentCommand.CreateDocument payload ->
-             sprintf "POST %s %s"
-               (Endpoints.documentsBySlug context.key.slug)
-               (Newtonsoft.Json.JsonConvert.SerializeObject payload)
-         | DocumentCommand.DeleteDocument id ->
-             sprintf "DELETE %s" (Endpoints.documentById context.key.slug (string id)))
-        commands
-    else
-
-    let createPath =
-      Endpoints.documentsBySlug context.key.slug
-
-    let deletePath (documentId: int) =
-      Endpoints.documentById context.key.slug (string documentId)
-
-    let mapCommandToOperation (command: DocumentCommand) =
-      match command with
+    let formatDryRun = function
       | DocumentCommand.CreateDocument payload ->
-          (fun () ->
-                Http.postJson<DocumentCreatePayload, DocumentFull> context.ctx.http createPath payload
-                |> AsyncResult.map DocumentCreated)
+          sprintf "POST %s %s"
+            (Endpoints.documentsBySlug context.key.slug)
+            (Newtonsoft.Json.JsonConvert.SerializeObject payload)
       | DocumentCommand.DeleteDocument id ->
-          (fun () ->
-                Http.deleteJson<unit> context.ctx.http (deletePath id)
-                |> AsyncResult.map (fun () -> DocumentDeleted id))
+          sprintf "DELETE %s" (Endpoints.documentById context.key.slug (string id))
 
-    asyncSeq {
-      try
-        yield!
-          commands
-          |> AsyncSeqResult.unwrapOrThrow
-          |> AsyncSeq.map mapCommandToOperation
-          |> NocfoClient.Streams.streamChanges (fun op -> op ())
-          |> mapHttpError
-      with
-      | DomainStreamException err ->
-          yield Error err
-    }
+    let mapToOperation = function
+      | DocumentCommand.CreateDocument payload ->
+          fun () ->
+            Http.postJson<DocumentCreatePayload, DocumentFull>
+              context.ctx.http (Endpoints.documentsBySlug context.key.slug) payload
+            |> AsyncResult.map DocumentCreated
+      | DocumentCommand.DeleteDocument id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.documentById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> DocumentDeleted id)
+
+    executeCommands context formatDryRun mapToOperation commands
 
   let executeContactCommands
     (context: BusinessContext)
     (commands: AsyncSeq<Result<ContactCommand, DomainError>>)
     : AsyncSeq<Result<ContactResult, DomainError>> =
 
-    if context.ctx.options.dryRun then
-      dryRunCommands
-        (function
-         | ContactCommand.UpdateContact delta ->
-             sprintf "PATCH %s %s"
-               (Endpoints.contactById context.key.slug (string delta.id))
-               (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
-         | ContactCommand.DeleteContact id ->
-             sprintf "DELETE %s" (Endpoints.contactById context.key.slug (string id)))
-        commands
-    else
-
-    let patchPath (contactId: int) =
-      Endpoints.contactById context.key.slug (string contactId)
-
-    let deletePath (contactId: int) =
-      Endpoints.contactById context.key.slug (string contactId)
-
-    let mapCommandToOperation (command: ContactCommand) =
-      match command with
+    let formatDryRun = function
       | ContactCommand.UpdateContact delta ->
-          (fun () ->
-                Http.patchJson<NocfoApi.Types.PatchedContactRequest, ContactFull> context.ctx.http (patchPath delta.id) delta.patch
-                |> AsyncResult.map ContactUpdated)
+          sprintf "PATCH %s %s"
+            (Endpoints.contactById context.key.slug (string delta.id))
+            (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
       | ContactCommand.DeleteContact id ->
-          (fun () ->
-                Http.deleteJson<unit> context.ctx.http (deletePath id)
-                |> AsyncResult.map (fun () -> ContactDeleted id))
+          sprintf "DELETE %s" (Endpoints.contactById context.key.slug (string id))
 
-    asyncSeq {
-      try
-        yield!
-          commands
-          |> AsyncSeqResult.unwrapOrThrow
-          |> AsyncSeq.map mapCommandToOperation
-          |> NocfoClient.Streams.streamChanges (fun op -> op ())
-          |> mapHttpError
-      with
-      | DomainStreamException err ->
-          yield Error err
-    }
+    let mapToOperation = function
+      | ContactCommand.UpdateContact delta ->
+          fun () ->
+            Http.patchJson<PatchedContactRequest, ContactFull>
+              context.ctx.http (Endpoints.contactById context.key.slug (string delta.id)) delta.patch
+            |> AsyncResult.map ContactUpdated
+      | ContactCommand.DeleteContact id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.contactById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> ContactDeleted id)
+
+    executeCommands context formatDryRun mapToOperation commands
 
 ///
 /// BusinessResolver module operations
