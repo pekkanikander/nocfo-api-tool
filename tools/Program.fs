@@ -117,70 +117,36 @@ let updateBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesAr
         return ExitCodes.EX_SOFTWARE
     }
 
-let foldAccountCommandResults (results: AsyncSeq<Result<AccountResult, DomainError>>) : Async<int> =
+let private foldCommandResults (printOk: 'Result -> unit) (results: AsyncSeq<Result<'Result, DomainError>>) : Async<int> =
     async {
-        let! errorCount =
+        let! n =
             results
-            |> AsyncSeq.fold (fun errorCount result ->
-                match result with
-                | Ok (AccountUpdated account) ->
-                    printfn "Updated account %d (%s)" account.id account.number
-                    errorCount
-                | Ok (AccountDeleted accountId) ->
-                    printfn "Deleted account %d" accountId
-                    errorCount
-                | Error err ->
-                    printfn "Command failed: %A" err
-                    errorCount + 1) 0
-        return if errorCount > 0 then 1 else 0
+            |> AsyncSeq.fold (fun n r ->
+                match r with
+                | Ok v  -> printOk v; n
+                | Error e -> printfn "Command failed: %A" e; n + 1) 0
+        return if n > 0 then 1 else 0
     }
 
-let foldDocumentCommandResults (results: AsyncSeq<Result<DocumentResult, DomainError>>) : Async<int> =
-    async {
-        let! errorCount =
-            results
-            |> AsyncSeq.fold (fun errorCount result ->
-                match result with
-                | Ok (DocumentCreated document) ->
-                    printfn "Created document %d (%s)" document.id (defaultArg document.number "<none>")
-                    errorCount
-                | Ok (DocumentDeleted documentId) ->
-                    printfn "Deleted document %d" documentId
-                    errorCount
-                | Error err ->
-                    printfn "Command failed: %A" err
-                    errorCount + 1) 0
-        return if errorCount > 0 then 1 else 0
-    }
+let foldAccountCommandResults =
+    foldCommandResults (function
+        | AccountUpdated account  -> printfn "Updated account %d (%s)" account.id account.number
+        | AccountDeleted id       -> printfn "Deleted account %d" id
+        | AccountCreated account  -> printfn "Created account %d (%s)" account.id account.number)
 
-let foldContactCommandResults (results: AsyncSeq<Result<ContactResult, DomainError>>) : Async<int> =
-    async {
-        let! errorCount =
-            results
-            |> AsyncSeq.fold (fun errorCount result ->
-                match result with
-                | Ok (ContactUpdated contact) ->
-                    printfn "Updated contact %d (%s)" contact.id contact.name
-                    errorCount
-                | Ok (ContactDeleted contactId) ->
-                    printfn "Deleted contact %d" contactId
-                    errorCount
-                | Error err ->
-                    printfn "Command failed: %A" err
-                    errorCount + 1) 0
-        return if errorCount > 0 then 1 else 0
-    }
+let foldDocumentCommandResults =
+    foldCommandResults (function
+        | DocumentCreated document -> printfn "Created document %d (%s)" document.id (defaultArg document.number "<none>")
+        | DocumentDeleted id       -> printfn "Deleted document %d" id)
+
+let foldContactCommandResults =
+    foldCommandResults (function
+        | ContactUpdated contact -> printfn "Updated contact %d (%s)" contact.id contact.name
+        | ContactDeleted id      -> printfn "Deleted contact %d" id
+        | ContactCreated contact -> printfn "Created contact %d (%s)" contact.id contact.name)
 
 [<CLIMutable>]
-type private DocumentDeletePayload =
-    { id: int }
-
-[<CLIMutable>]
-type private AccountDeletePayload =
-    { id: int }
-
-[<CLIMutable>]
-type private ContactDeletePayload =
+type private DeletePayload =
     { id: int }
 
 let updateAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
@@ -219,71 +185,34 @@ let updateContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
             return 1
     }
 
-let deleteAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+let private deleteEntities<'Command, 'Result>
+    (toolContext: ToolContext)
+    (args: ParseResults<BusinessScopedArgs>)
+    (fields: string list)
+    (mkCommand: int -> 'Command)
+    (execute: BusinessContext -> AsyncSeq<Result<'Command, DomainError>> -> AsyncSeq<Result<'Result, DomainError>>)
+    (foldResults: AsyncSeq<Result<'Result, DomainError>> -> Async<int>) =
     async {
-        let f = "id" :: fields
-        let input = toolContext.Input
         let csvStream =
-            Nocfo.Csv.readCsvGeneric<AccountDeletePayload> input (Some f)
-            |> AsyncSeq.map Ok
+            Nocfo.Csv.readCsvGeneric<DeletePayload> toolContext.Input (Some ("id" :: fields))
+            |> AsyncSeq.map (fun p -> Ok (mkCommand p.id))
         let! businessContext = getBusinessContext toolContext args
         match businessContext with
         | Ok ctx ->
-            let commands =
-                csvStream
-                |> AsyncSeq.map (Result.map (fun account -> AccountCommand.DeleteAccount account.id))
-            return!
-                commands
-                |> Streams.executeAccountCommands ctx
-                |> foldAccountCommandResults
+            return! csvStream |> execute ctx |> foldResults
         | Error error ->
             eprintfn "Failed to get business context: %A" error
             return 1
     }
+
+let deleteAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    deleteEntities toolContext args fields AccountCommand.DeleteAccount Streams.executeAccountCommands foldAccountCommandResults
 
 let deleteDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
-    async {
-        let f = "id" :: fields
-        let input = toolContext.Input
-        let csvStream =
-            Nocfo.Csv.readCsvGeneric<DocumentDeletePayload> input (Some f)
-            |> AsyncSeq.map Ok
-        let! businessContext = getBusinessContext toolContext args
-        match businessContext with
-        | Ok ctx ->
-            let commands =
-                csvStream
-                |> AsyncSeq.map (Result.map (fun document -> DocumentCommand.DeleteDocument document.id))
-            return!
-                commands
-                |> Streams.executeDocumentCommands ctx
-                |> foldDocumentCommandResults
-        | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
-    }
+    deleteEntities toolContext args fields DocumentCommand.DeleteDocument Streams.executeDocumentCommands foldDocumentCommandResults
 
 let deleteContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
-    async {
-        let f = "id" :: fields
-        let input = toolContext.Input
-        let csvStream =
-            Nocfo.Csv.readCsvGeneric<ContactDeletePayload> input (Some f)
-            |> AsyncSeq.map Ok
-        let! businessContext = getBusinessContext toolContext args
-        match businessContext with
-        | Ok ctx ->
-            let commands =
-                csvStream
-                |> AsyncSeq.map (Result.map (fun contact -> ContactCommand.DeleteContact contact.id))
-            return!
-                commands
-                |> Streams.executeContactCommands ctx
-                |> foldContactCommandResults
-        | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
-    }
+    deleteEntities toolContext args fields ContactCommand.DeleteContact Streams.executeContactCommands foldContactCommandResults
 
 // XXX: TODO: Implement an abstract 'command' type and a map of commands to functions.
 let list (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
@@ -551,6 +480,40 @@ let private loadAccountIdMap (mapPath: string) =
         return rows |> List.map (fun row -> row.source_id, row.target_id) |> Map.ofList
     }
 
+let createAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    async {
+        let! businessContext = getBusinessContext toolContext args
+        match businessContext with
+        | Error error ->
+            eprintfn "Failed to get business context: %A" error
+            return 1
+        | Ok ctx ->
+            let commands =
+                Nocfo.Csv.readCsvGeneric<AccountCreatePayload> toolContext.Input (Some fields)
+                |> AsyncSeq.map (fun payload -> Ok (AccountCommand.CreateAccount payload))
+            return!
+                commands
+                |> Streams.executeAccountCommands ctx
+                |> foldAccountCommandResults
+    }
+
+let createContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    async {
+        let! businessContext = getBusinessContext toolContext args
+        match businessContext with
+        | Error error ->
+            eprintfn "Failed to get business context: %A" error
+            return 1
+        | Ok ctx ->
+            let commands =
+                Nocfo.Csv.readCsvGeneric<ContactCreatePayload> toolContext.Input (Some fields)
+                |> AsyncSeq.map (fun payload -> Ok (ContactCommand.CreateContact payload))
+            return!
+                commands
+                |> Streams.executeContactCommands ctx
+                |> foldContactCommandResults
+    }
+
 let createDocuments (toolContext: ToolContext) (args: ParseResults<DocumentCreateArgs>) (fields: string list) =
     async {
         let businessId = args.GetResult(DocumentCreateArgs.BusinessId, defaultValue = "")
@@ -589,7 +552,10 @@ let create (toolContext: ToolContext) (args: ParseResults<CreateEntitiesArgs>) =
         let (entityTypeAndArgs, fields) = handleCreateEntitiesArgs args
         return!
             match entityTypeAndArgs with
-            | CreateEntitiesArgs.Documents documentArgs -> createDocuments toolContext documentArgs fields
+            | CreateEntitiesArgs.Accounts  accountArgs   -> createAccounts  toolContext accountArgs  fields
+            | CreateEntitiesArgs.Contacts  contactArgs   -> createContacts  toolContext contactArgs  fields
+            | CreateEntitiesArgs.Documents documentArgs  -> createDocuments toolContext documentArgs fields
+            | CreateEntitiesArgs.Businesses _            -> failwith "create businesses: not yet implemented"
             | _ -> failwith "Unknown create entity type"
     }
 

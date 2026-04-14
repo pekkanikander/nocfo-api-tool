@@ -57,12 +57,18 @@ type DocumentCreateArgs =
 [<RequireSubcommand>]
 type CreateEntitiesArgs =
     | [< AltCommandLine("-f"); Inherit >]         Fields of fields: string list
+    | [< NoPrefix; SubCommand >]                  Accounts  of ParseResults<BusinessScopedArgs>
+    | [< NoPrefix; SubCommand >]                  Contacts  of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<DocumentCreateArgs>
+    | [< NoPrefix; SubCommand >]                  Businesses of ParseResults<BusinessesArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Fields _     -> "Comma-separated list of fields to read from CSV (default: all create fields)."
+            | Accounts _   -> "Create accounts from CSV input."
+            | Contacts _   -> "Create contacts from CSV input."
             | Documents _  -> "Create documents from CSV input."
+            | Businesses _ -> "Create businesses from CSV input."
 
 [<RequireSubcommand>]
 type CliArgs =

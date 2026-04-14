@@ -79,14 +79,23 @@ type AccountDelta =
 /// Account is a hydratable of its full form with AccountRow as the partial
 type Account  = Hydratable<AccountFull, AccountRow>
 
+[<CLIMutable>]
+type AccountCreatePayload =
+  { number: string
+    name: string
+    ``type``: NocfoApi.Types.Type92dEnum option
+    description: string option
+    opening_balance: float32 option }
+
 /// Domain-level account commands expressing intent before hitting HTTP.
 type AccountCommand =
-  | CreateAccount of Account
+  | CreateAccount of AccountCreatePayload
   | UpdateAccount of AccountDelta
   | DeleteAccount of accountId:int
 
 /// Result of executing an account command.
 type AccountResult =
+  | AccountCreated of AccountFull
   | AccountUpdated of AccountFull
   | AccountDeleted of int
 
@@ -132,11 +141,22 @@ type ContactDelta =
 
 type Contact      = Hydratable<ContactFull, ContactRow>
 
+[<CLIMutable>]
+type ContactCreatePayload =
+  { name: string
+    ``type``: NocfoApi.Types.ContactTypeEnum option
+    customer_id: string option
+    contact_business_id: string option
+    notes: string option
+    phone_number: string option }
+
 type ContactCommand =
+  | CreateContact of ContactCreatePayload
   | UpdateContact of ContactDelta
   | DeleteContact of contactId:int
 
 type ContactResult =
+  | ContactCreated of ContactFull
   | ContactUpdated of ContactFull
   | ContactDeleted of int
 
@@ -633,15 +653,28 @@ module Streams =
     : AsyncSeq<Result<AccountResult, DomainError>> =
 
     let formatDryRun = function
+      | AccountCommand.CreateAccount payload ->
+          sprintf "POST %s %s"
+            (Endpoints.accountsBySlug context.key.slug)
+            (Newtonsoft.Json.JsonConvert.SerializeObject payload)
       | AccountCommand.UpdateAccount delta ->
           sprintf "PATCH %s %s"
             (Endpoints.accountById context.key.slug (string delta.id))
             (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
       | AccountCommand.DeleteAccount id ->
           sprintf "DELETE %s" (Endpoints.accountById context.key.slug (string id))
-      | AccountCommand.CreateAccount _ -> "POST (create account not yet implemented)"
 
     let mapToOperation = function
+      | AccountCommand.CreateAccount payload ->
+          fun () ->
+            let req =
+              { NocfoApi.Types.AccountRequest.Create(payload.number, [{ key = "fi"; value = payload.name }]) with
+                  ``type``         = payload.``type``
+                  description      = payload.description
+                  opening_balance  = payload.opening_balance }
+            Http.postJson<NocfoApi.Types.AccountRequest, AccountFull>
+              context.ctx.http (Endpoints.accountsBySlug context.key.slug) req
+            |> AsyncResult.map AccountCreated
       | AccountCommand.UpdateAccount delta ->
           fun () ->
             Http.patchJson<PatchedAccountRequest, AccountFull>
@@ -651,8 +684,6 @@ module Streams =
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.accountById context.key.slug (string id))
             |> AsyncResult.map (fun () -> AccountDeleted id)
-      | AccountCommand.CreateAccount _ ->
-          raise (DomainStreamException (DomainError.Unexpected "CreateAccount is not supported yet."))
 
     executeCommands context formatDryRun mapToOperation commands
 
@@ -688,6 +719,10 @@ module Streams =
     : AsyncSeq<Result<ContactResult, DomainError>> =
 
     let formatDryRun = function
+      | ContactCommand.CreateContact payload ->
+          sprintf "POST %s %s"
+            (Endpoints.contactsBySlug context.key.slug)
+            (Newtonsoft.Json.JsonConvert.SerializeObject payload)
       | ContactCommand.UpdateContact delta ->
           sprintf "PATCH %s %s"
             (Endpoints.contactById context.key.slug (string delta.id))
@@ -696,6 +731,18 @@ module Streams =
           sprintf "DELETE %s" (Endpoints.contactById context.key.slug (string id))
 
     let mapToOperation = function
+      | ContactCommand.CreateContact payload ->
+          fun () ->
+            let req =
+              { NocfoApi.Types.ContactRequest.Create(payload.name) with
+                  ``type``             = payload.``type``
+                  customer_id          = payload.customer_id
+                  contact_business_id  = payload.contact_business_id
+                  notes                = payload.notes
+                  phone_number         = payload.phone_number }
+            Http.postJson<NocfoApi.Types.ContactRequest, ContactFull>
+              context.ctx.http (Endpoints.contactsBySlug context.key.slug) req
+            |> AsyncResult.map ContactCreated
       | ContactCommand.UpdateContact delta ->
           fun () ->
             Http.patchJson<PatchedContactRequest, ContactFull>
