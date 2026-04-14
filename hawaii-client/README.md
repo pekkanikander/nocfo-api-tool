@@ -2,47 +2,35 @@
 
 > **Status:** Revalidated against the live NoCFO test environment on April 7, 2026.
 
-This folder contains the fifth iteration of our NoCFO API explorations:
-an F# façade over Hawaii-generated types with lazy streams, hydratable domain entities,
-and a handful of F# script sandboxes.
-It is intentionally lightweight so the patterns are easy to lift into other projects.
+This folder contains the Hawaii-backed F# library that powers the `nocfo` CLI.
+It combines committed generated client/types with hand-written HTTP, streaming,
+domain, patch, reports, and CSV layers.
 
 ## Layout
 
 ```
 hawaii-client/
-├── generated/              # Hawaii output we keep committed for convenience
+├── generated/              # Hawaii output kept committed for reproducible builds
 │   ├── Types.fs            # DTOs (Paginated* etc.)
-│   ├── Client.fs           # Auto-generated client (unused directly; we wrap it)
+│   ├── Client.fs           # Generated client surface
 │   ├── OpenApiHttp.fs      # Serializer + tolerant enum helpers
 │   └── StringEnum.fs
 ├── src/
-│   ├── Endpoints.fs        # Centralised path builders (v1/business/…)
-│   ├── Http.fs             # Token-aware HttpClient wiring
-│   ├── AsyncSeq.fs         # Pagination helpers with AsyncSeq<Result<_,_>>
-│   ├── Streams.fs          # Low-level streamers over paginated endpoints
-│   └── Domain.fs           # Hydratable Business/Account + folds
-├── Test*.fsx               # Script sandboxes (streams, balances, etc.)
-├── RawHttpTest.fsx         # Minimal reproduction of live HTTP issues
+│   ├── Endpoints.fs        # Centralized path builders (v1/business/...)
+│   ├── Http.fs             # Token-aware HttpClient wiring + retry/error handling
+│   ├── AsyncSeq.fs         # Pagination helpers and alignment utilities
+│   ├── Streams.fs          # AsyncSeq helpers over paginated endpoints
+│   ├── PatchShape.fs       # Typed PATCH normalization/diff helpers
+│   ├── Domain.fs           # Hydratable entities + command execution
+│   ├── Reports.fs          # Small fold/report helpers
+│   ├── CsvHelper.fs        # CsvHelper interop glue
+│   └── Csv.fs              # Generic CSV read/write helpers
+├── hawaii-client.fsproj    # Main F# library
+├── nocfo-api-hawaii.json   # Generator config for the NoCFO OpenAPI spec
 ├── Domain-design.md        # Notes on the domain model direction
-└── api-spec-test.sh        # Optional spec-vs-server drift signal (Schemathesis + Dredd)
+├── api-spec-test.sh        # Optional spec-vs-server drift signal
+└── README.md
 ```
-
-Scripts with the `Test*.fsx` prefix expect the compiled library in `bin/Debug` plus the generated DLLs under `generated/bin`.
-They are small, self-contained experiments rather than polished CLI tools.
-
-Read-only scripts:
-- `TestClient.fsx`
-- `TestPatchShape.fsx`
-- `TestAlignAccountsPermissive.fsx`
-- `TestCsvReadDeltas.fsx`
-- `TestBalance.fsx`
-
-Mutating or potentially mutating scripts:
-- `TestStreams.fsx` (patches an account near the end)
-- `TestAccountUpdates.fsx`
-- `TestCreate*.fsx`
-- `api-spec-test.sh` (not recommended; can pollute server state)
 
 The CLI under `../tools` links against this project. When you evolve the domain
 surface or CSV helpers, remember that the CLI depends on those modules directly.
@@ -60,41 +48,44 @@ Token management portals:
 - Test: <https://login-tst.nocfo.io/auth/tokens/>
 - (Production: <https://login.nocfo.io/auth/tokens/>)
 
-## Build Once, Then Explore
+## Build And Test
 
 ```bash
-cd hawaii-client
-dotnet build
-export NOCFO_TOKEN="paste-your-token"
+dotnet build hawaii-client/hawaii-client.fsproj
 ```
 
-If you have a local `.env`, you can use this instead:
+To build the whole repo instead:
 
 ```bash
-source .env
-cd hawaii-client
-dotnet build
+dotnet build nocfo.slnx
 ```
 
-After the build, the scripts can be run in place with `dotnet fsi <script.fsx>`. Highlights:
+The pure unit tests live in the repo-root `tests/` project:
 
-- `TestStreams.fsx` – Streams the first few businesses, then accounts, using the `Domain.Streams` wrappers.
-- `TestBalance.fsx` – Computes a simple trial balance by hydrating accounts lazily and folding by `AccountClass`.
-   Requires setting Business slug into the source code. Fails without.
-- `TestClient.fsx` – Raw HTTP smoke test that bypasses the higher-level abstractions.
-- `RawHttpTest.fsx` / `STRPTest.fsx` – Repro harnesses from earlier debugging sessions; consult the comments before using.
+```bash
+dotnet test tests/tests.fsproj
+```
 
-Some legacy scripts (`TestAsyncSeq.fsx`, etc.) capture older experiments and may need small adjustments if you want to re-run them with the current `Http` module.
+No network access is required for those unit tests. Network access is only needed when
+you regenerate the OpenAPI client, run the spec-drift script, or exercise the CLI
+against a live NoCFO environment.
 
 ## How the Pieces Fit
 
 - `Http.createHttpContext` normalises the base URL (always `/v1`) and attaches `Authorization: Token <value>` to each request. All HTTP helpers surface a structured `HttpError` DU (`Unauthorized`, `NotFound`, `RateLimited`, `ServerError`, `ClientError`, `ParseError`) and retry automatically on 429/5xx with exponential backoff.
 - `AsyncSeqHelpers.paginateByPageSRTP` expresses “fetch page → yield results → follow `next`” as an `AsyncSeq<Result<'a,_>>`, preserving ordering and letting callers apply back-pressure.
-- `Streams.streamBusinesses` / `streamAccounts` wrap generated DTOs in domain types, ensuring we always carry hydration hooks inside `Hydratable`.
+- `Streams.streamBusinesses` / `streamAccounts` / `streamContacts` / `streamDocuments`
+  wrap generated DTOs in domain types, ensuring we always carry hydration hooks inside
+  `Hydratable`.
 - `Domain.Hydratable` plus `Streams.hydrateAndUnwrap` give consumers (CLI + scripts) the choice between lazy partials and eagerly hydrated entities.
-- `Account.executeDeltaUpdates` and `Contact.executeDeltaUpdates` drive update flows by fetching the current entity for each CSV `id`, diffing, and PATCHing in CSV order
-- `Streams.executeAccountCommands` interprets commands and converts them into HTTP API calls.
+- `PatchShape` computes typed PATCH bodies by comparing desired delta rows with the
+  freshly fetched API entity.
+- `Account.executeDeltaUpdates` and `Contact.executeDeltaUpdates` drive update flows
+  by fetching the current entity for each CSV `id`, diffing, and PATCHing in CSV order.
+- `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
+  `Streams.executeDocumentCommands` interpret command streams and turn them into HTTP API calls.
 - `Reports.addToTotals` shows how to write deterministic folds on top of the streaming surface; treat it as a template for new reporting modules.
+- `Csv.fs` plus `CsvHelper.fs` provide the generic CSV mapping used by both tests and CLI commands.
 
 Use `Domain-design.md` for the higher-level rationale before touching alignment logic or hydration semantics.
 
@@ -104,10 +95,14 @@ Use `Domain-design.md` for the higher-level rationale before touching alignment 
 
 - `Nocfo.Tools.Runtime` builds on `Http.createHttpContext` + `Accounting.ofHttp`.
 - `BusinessResolver.resolve` (from `Domain.fs`) is how the CLI maps free-form IDs to a `BusinessContext`.
-- `Streams.streamBusinesses` / `streamAccounts` plus `hydrateAndUnwrap` provide the listing flows.
-- `Account.executeDeltaUpdates` / `Contact.executeDeltaUpdates` implement per-row `update`
-- `Streams.executeAccountCommands` implements account deletes.
-- `Nocfo.CsvHelpers` defines the CsvHelper converters that keep our CSV exports/imports deterministic.
+- `Streams.streamBusinesses` / `streamAccounts` / `streamContacts` / `streamDocuments`
+  plus `hydrateAndUnwrap` provide the listing flows.
+- `Account.executeDeltaUpdates` / `Contact.executeDeltaUpdates` implement per-row updates.
+- `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
+  `Streams.executeDocumentCommands` implement deletes and document creation.
+- `Alignment.alignEntries` is used by `map accounts` to align hydrated source and target
+  account streams by account number.
+- `Csv.fs` and `Nocfo.CsvHelpers` keep CSV exports/imports deterministic.
 
 If you add or rename domain types, plan to update both this README and `tools/README.md` so users understand which commands are affected.
 
@@ -117,10 +112,10 @@ If you add or rename domain types, plan to update both this README and `tools/RE
 2. Compose a stream using `Streams.streamPaginated` or a custom AsyncSeq that fetches the endpoint and maps DTOs into domain types.
 3. If the entity benefits from lazy hydration, create a `Hydratable` wrapper similar to `Account`.
 4. Extend `Domain` with diff/command helpers so CLI-style workflows stay declarative.
-5. Add CSV helpers (if needed) and expose them via a script or CLI command to exercise the flow end-to-end.
+5. Add CSV helpers (if needed) and wire the flow into the CLI and unit tests.
 
 The `Account` modules are the most complete example of this pattern (listing, delta computation, execution).
-Mirror that approach for new entities (e.g., documents, transactions).
+Mirror that approach for new entities that are not covered yet (for example transactions or accounting periods).
 
 ## Refreshing the OpenAPI spec
 
@@ -200,20 +195,11 @@ Note that running **Schemathesis may pollute you server environment.** Be carefu
 
 The script produces a short Markdown summary alongside the raw JUnit/HAR artifacts.
 
-## Running the Unit Tests
-
-The `tests/` project (at the repo root) covers the pure modules in this library with no network access:
-
-```bash
-dotnet test tests
-```
-
-See `tests/` and the **Testing Approach** section in `CLAUDE.md` for details, including the pattern required when asserting on `inline` SRTP functions with Unquote.
-
 ## What’s Next (if you continue)
 
-- Extend `Domain.Streams` to other endpoints (transactions, documents) so the CLI can manage more entities.
+- Extend the domain/stream surface to other endpoints that the CLI does not cover yet,
+  such as transactions, accounting periods, or VAT/reporting flows.
 - Upstream the Hawaii generator patch set instead of pinning to the local fork.
 
-Until then, treat this folder as a living notebook of the first workable Hawaii-based NoCFO client.
-Lift ideas, refactor freely, and keep the scripts runnable so future explorers can reproduce the flows quickly.
+Until then, treat this folder as the maintained Hawaii-based NoCFO client library
+that the CLI builds on.

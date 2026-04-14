@@ -1,15 +1,16 @@
 # `nocfo` CLI (tools/)
 
-Thin Argu-based CLI that exercises the `hawaii-client` library (without touching
-the F# scripts there.)
+Thin Argu-based CLI built on top of the shared `hawaii-client` library.
 
-Treat this as the user-facing path for listing businesses/documents/accounts and updating/deleting accounts via CSV.
+Treat this as the user-facing path for listing businesses/accounts/contacts/documents,
+updating accounts and contacts from CSV, deleting accounts/contacts/documents,
+mapping account IDs between environments, and creating minimal documents from CSV.
 
 ## Quick start
 
 ```bash
-dotnet build ../hawaii-client
-export NOCFO_TOKEN="paste-your-token"
+dotnet build
+export NOCFO_TARGET_TOKEN="paste-your-token"        # For tst environment
 export NOCFO_SOURCE_TOKEN="paste-your-prod-token"   # needed for `map accounts`
 
 dotnet run --project tools -- list businesses \
@@ -45,6 +46,19 @@ dotnet run --project tools -- create documents \
 
 If a local `.env` exists, you may `source .env` first and skip the manual exports. That file is local-only and is not committed to GitHub.
 
+## Prebuilt releases
+
+GitHub Actions publishes self-contained release archives automatically when a tag
+matching `v*` is pushed. Current release targets:
+
+- `osx-arm64`
+- `linux-x64`
+- `win-x64`
+
+Assets are published as `nocfo-<tag>-<rid>.tar.gz` for Unix targets and
+`nocfo-<tag>-<rid>.zip` for Windows. Each archive contains the full publish
+directory for that RID.
+
 Requirements:
 
 - .NET 10 SDK
@@ -52,7 +66,7 @@ Requirements:
 - `NOCFO_TARGET_BASE_URL` (optional), fallback `NOCFO_BASE_URL`, default `https://api-tst.nocfo.io`
 - `NOCFO_SOURCE_TOKEN` (required for `map accounts`)
 - `NOCFO_SOURCE_BASE_URL` (optional, default `https://api-prd.nocfo.io`)
-- Build artifacts: run `dotnet build` from the repo root (uses `nocfo.sln`)
+- Build artifacts: run `dotnet build` from the repo root (uses `nocfo.slnx`)
 
 ## Command surface
 
@@ -162,17 +176,16 @@ The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` fr
 - **Program flow** (`Program.fs`):
   - `list` commands: stream via `Streams.streamBusinesses`, `Streams.streamAccounts`, `Streams.streamContacts`, or `Streams.streamDocuments`, hydrate rows (`Streams.hydrateAndUnwrap`), write CSV lazily.
   - `update` accounts/contacts: read CSV into repo-owned delta records (`AccountDelta` / `ContactDelta`), fetch the current entity for each CSV `id`, normalize against that fresh API state, and PATCH immediately when something changed.
-  - `delete` accounts: map CSV rows to `AccountCommand.DeleteAccount` and reuse the same execution + folding machinery.
+  - `delete` accounts/contacts/documents: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
   - `map accounts`: align source/target account streams by `number` and output `source_id,target_id,number`.
-  - `create documents`: read minimal create payload rows, optionally rewrite blueprint account IDs, then POST documents sequentially.
+  - `create documents`: read minimal create payload rows, optionally rewrite blueprint account IDs, then POST documents sequentially through `Streams.executeDocumentCommands`.
 
 Everything runs on `AsyncSeq`, so listing scales to large datasets without holding them all in memory.
 
 ## Limitations / future work
 
 - Business updates and account creation are placeholders.
-- `update` trades extra GET requests for streaming-friendly semantics; very large CSV updates will be network-bound.
-- `--format` is hard-wired to CSV; JSON or Parquet would require additional mapping.
-- Packaging as a standalone `nocfo` binary is planned but not implemented.
+- `update` trades extra GET requests for streaming-friendly semantics; large CSV updates are network-bound.
+- Standalone binaries are published through GitHub Releases.
 
 See `../hawaii-client/README.md` for deeper implementation notes and ideas for extending the domain model.

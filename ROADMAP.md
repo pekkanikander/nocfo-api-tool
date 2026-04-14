@@ -178,11 +178,12 @@ Native AOT becomes viable only after PatchShape is rewritten as SRTP `inline` fu
 (types resolved statically at compile time; no reflection, no trimmer problem). That rewrite
 is a natural follow-on to the Phase 2.3 genericisation work and is the preferred eventual path.
 
-### 3.2 GitHub Actions CI pipeline
+### 3.2 GitHub Actions CI pipeline — In progress
 
 Triggers: push to main, pull requests
 
 Jobs:
+
 1. `build` — `dotnet build` for all projects
 2. `test` — `dotnet test tests/`
 3. `publish` — matrix over three RIDs, upload artifacts to GitHub Release on tag

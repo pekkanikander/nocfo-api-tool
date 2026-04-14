@@ -20,6 +20,10 @@ An F# CLI tool and client library for the [NoCFO](https://nocfo.io/) Finnish acc
 The CLI in `tools/` is the easiest way to interact with the API. It streams
 entities, writes them as CSV, and can reconcile edited rows back to the server.
 
+Prebuilt self-contained binaries are published on GitHub Releases for `osx-arm64`,
+`linux-x64`, and `win-x64`. Pushing a tag named `vX.Y.Z` triggers CI to build
+and attach `nocfo-<tag>-<rid>` archives to that release.
+
 1. **Prerequisites**
    - .NET 10 SDK (`dotnet --version` ≥ 10.0)
    - macOS or Linux shell (the code itself is cross-platform)
@@ -123,6 +127,19 @@ entities, writes them as CSV, and can reconcile edited rows back to the server.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,
 and the internal architecture.
+
+## Releases
+
+CI publishes release archives automatically when a tag matching `v*` is pushed.
+Current release targets:
+
+- `osx-arm64`
+- `linux-x64`
+- `win-x64`
+
+Assets are named `nocfo-<tag>-<rid>.tar.gz` on Unix targets and
+`nocfo-<tag>-<rid>.zip` on Windows. Each archive contains the full self-contained
+publish directory for that platform.
 
 ## Regenerating the Hawaii Client
 
