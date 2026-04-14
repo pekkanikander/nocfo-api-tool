@@ -63,6 +63,13 @@ type BusinessDeltaRow =
     static member Create (slug: string, patch: NocfoApi.Types.PatchedBusinessRequest) =
       { slug = slug; patch = patch }
 
+[<CLIMutable>]
+type BusinessCreatePayload =
+  { name: string
+    slug: string option
+    business_id: string option
+    form: NocfoApi.Types.FormEnum option }
+
 type BusinessResult =
   | BusinessUpdated of BusinessFull
   | BusinessCreated of BusinessFull
@@ -478,7 +485,7 @@ module Business =
                 raw  = raw }
             Some (BusinessUpdated full))
 
-    DeltaUpdate.run (fun d -> d.slug) (fetchBySlug context) diffToPatch handlePatch deltas
+    DeltaUpdate.run (fun (d: BusinessDeltaRow) -> d.slug) (fetchBySlug context) diffToPatch handlePatch deltas
 
 ///
 /// Account module operations
@@ -810,14 +817,19 @@ module Streams =
 
   let executeBusinessCommands
     (context: AccountingContext)
-    (commands: AsyncSeq<Result<NocfoApi.Types.BusinessRequest, DomainError>>)
+    (commands: AsyncSeq<Result<BusinessCreatePayload, DomainError>>)
     : AsyncSeq<Result<BusinessResult, DomainError>> =
 
-    let postBusiness (req: NocfoApi.Types.BusinessRequest) =
+    let postBusiness (payload: BusinessCreatePayload) =
       if context.options.dryRun then async {
-        eprintfn "[dry-run] POST /business/ %s" (Newtonsoft.Json.JsonConvert.SerializeObject req)
+        eprintfn "[dry-run] POST /business/ %s" (Newtonsoft.Json.JsonConvert.SerializeObject payload)
         return Ok None
       } else
+        let req =
+          { NocfoApi.Types.BusinessRequest.Create(payload.name) with
+              slug        = payload.slug
+              business_id = payload.business_id
+              form        = payload.form }
         Http.postJson<NocfoApi.Types.BusinessRequest, NocfoApi.Types.Business>
           context.http Endpoints.businessListUrl req
         |> AsyncResult.mapError DomainError.Http

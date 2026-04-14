@@ -524,6 +524,17 @@ let createContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
                 |> foldContactCommandResults
     }
 
+let createBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs>) (fields: string list) =
+    async {
+        let commands =
+            Nocfo.Csv.readCsvGeneric<BusinessCreatePayload> toolContext.Input (Some fields)
+            |> AsyncSeq.map Ok
+        return!
+            commands
+            |> Streams.executeBusinessCommands toolContext.Accounting
+            |> foldBusinessCommandResults
+    }
+
 let createDocuments (toolContext: ToolContext) (args: ParseResults<DocumentCreateArgs>) (fields: string list) =
     async {
         let businessId = args.GetResult(DocumentCreateArgs.BusinessId, defaultValue = "")
@@ -565,7 +576,7 @@ let create (toolContext: ToolContext) (args: ParseResults<CreateEntitiesArgs>) =
             | CreateEntitiesArgs.Accounts  accountArgs   -> createAccounts  toolContext accountArgs  fields
             | CreateEntitiesArgs.Contacts  contactArgs   -> createContacts  toolContext contactArgs  fields
             | CreateEntitiesArgs.Documents documentArgs  -> createDocuments toolContext documentArgs fields
-            | CreateEntitiesArgs.Businesses _            -> failwith "create businesses: not yet implemented"
+            | CreateEntitiesArgs.Businesses businessArgs -> createBusinesses toolContext businessArgs fields
             | _ -> failwith "Unknown create entity type"
     }
 
