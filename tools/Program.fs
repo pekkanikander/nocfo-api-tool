@@ -111,12 +111,6 @@ let listContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedAr
         Streams.streamContacts
         "contact"
 
-let updateBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs>) =
-    async {
-        eprintfn "update businesses: not yet implemented"
-        return ExitCodes.EX_SOFTWARE
-    }
-
 let private foldCommandResults (printOk: 'Result -> unit) (results: AsyncSeq<Result<'Result, DomainError>>) : Async<int> =
     async {
         let! n =
@@ -145,9 +139,25 @@ let foldContactCommandResults =
         | ContactDeleted id      -> printfn "Deleted contact %d" id
         | ContactCreated contact -> printfn "Created contact %d (%s)" contact.id contact.name)
 
+let foldBusinessCommandResults =
+    foldCommandResults (function
+        | BusinessUpdated b -> printfn "Updated business %s (%s)" b.key.slug b.meta.name
+        | BusinessCreated b -> printfn "Created business %s (%s)" b.key.slug b.meta.name)
+
 [<CLIMutable>]
 type private DeletePayload =
     { id: int }
+
+let updateBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs>) (fields: string list) =
+    async {
+        let csvStream =
+            Nocfo.Csv.readDeltasByStrKey "slug" (fun s p -> BusinessDeltaRow.Create(s, p)) toolContext.Input (Some fields)
+            |> AsyncSeq.map Ok
+        return!
+            csvStream
+            |> Business.executeDeltaUpdates toolContext.Accounting
+            |> foldBusinessCommandResults
+    }
 
 let updateAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
     async {
@@ -232,7 +242,7 @@ let update  (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
         let (entityTypeAndArgs, fields) = handleEntitiesArgs args
         return!
             match entityTypeAndArgs with
-            | EntitiesArgs.Businesses args -> updateBusinesses toolContext args
+            | EntitiesArgs.Businesses args -> updateBusinesses toolContext args fields
             | EntitiesArgs.Accounts args   -> updateAccounts toolContext args fields
             | EntitiesArgs.Contacts args   -> updateContacts toolContext args fields
             | _ -> failwith "Unknown entity type"

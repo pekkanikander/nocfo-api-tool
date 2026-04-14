@@ -1,6 +1,7 @@
 namespace NocfoClient
 
 module Endpoints =
+    let businessListUrl               = "/business/"
     let businessBySlug (slug: string) = $"/business/{slug}/"
     let businessList (page: int)      = $"/business/?page_size=100&page={page}"
 

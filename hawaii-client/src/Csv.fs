@@ -524,3 +524,46 @@ module Csv =
       (fun id patch -> (^TDelta : (static member Create : int * ^TPatch -> ^TDelta) (id, patch)))
       tr
       fields
+
+  /// Like readDeltas but uses a named string column as the key instead of an integer 'id' column.
+  let readDeltasByStrKey<'TPatch, 'TDelta>
+      (keyColumn : string)
+      (mkDelta   : string -> 'TPatch -> 'TDelta)
+      (tr        : TextReader)
+      (fields    : string list option)
+    : AsyncSeq<'TDelta> =
+    let csv = mkCsvReader tr defaultIOOptions
+
+    registerFSharpConvertersFor csv.Context typeof<'TPatch>
+
+    let mutable disposed = false
+    let dispose () =
+      if not disposed then
+        (csv :> IDisposable).Dispose()
+        disposed <- true
+
+    asyncSeq {
+      try
+        let patchType = typeof<'TPatch>
+
+        if csv.Read() then
+          csv.ReadHeader() |> ignore
+
+          validateDeltaHeader<'TPatch> csv.HeaderRecord fields
+
+          let keyColIdx =
+            tryFindColumnIndex keyColumn csv.HeaderRecord
+            |> Option.defaultWith (fun () -> failwithf "CSV is missing required column '%s' for delta." keyColumn)
+
+          let patchFieldInfos, patchFieldColumns, patchDefaults =
+            collectRecordMetadata patchType csv.HeaderRecord fields
+
+          while csv.Read() do
+            let keyValue = csv.GetField(keyColIdx)
+            let patchValues = buildRecordFromCsv<'TPatch> csv patchFieldInfos patchFieldColumns patchDefaults
+            let patch = FSharpValue.MakeRecord(patchType, patchValues, true)
+            let delta = mkDelta keyValue (patch :?> 'TPatch)
+            yield delta
+      finally
+        dispose ()
+    }

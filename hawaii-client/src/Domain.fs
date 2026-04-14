@@ -55,7 +55,17 @@ type BusinessFull = {
 
 /// Business is a hydratable of its full form, with BusinessKey as the partial
 type Business = Hydratable<BusinessFull, BusinessKey>
-type BusinessDelta = NocfoApi.Types.PatchedBusinessRequest // XXX: Not implemented yet
+
+[<CLIMutable>]
+type BusinessDeltaRow =
+  { slug: string; patch: NocfoApi.Types.PatchedBusinessRequest }
+  with
+    static member Create (slug: string, patch: NocfoApi.Types.PatchedBusinessRequest) =
+      { slug = slug; patch = patch }
+
+type BusinessResult =
+  | BusinessUpdated of BusinessFull
+  | BusinessCreated of BusinessFull
 
 /// ------------------------------------------------------------
 /// Accounts
@@ -223,11 +233,11 @@ module DeltaUpdate =
   /// Core loop: fetch current state, diff, then call `handlePatch`.
   /// `handlePatch` returns `Ok (Some result)` on success, `Ok None` to skip silently
   /// (used for dry-run), or `Error` to propagate a failure.
-  let run<'Delta, 'Full, 'Patch, 'Result>
-    (getId        : 'Delta -> int)
-    (fetchCurrent : int -> Async<Result<'Full, DomainError>>)
+  let run<'Key, 'Delta, 'Full, 'Patch, 'Result>
+    (getId        : 'Delta -> 'Key)
+    (fetchCurrent : 'Key -> Async<Result<'Full, DomainError>>)
     (diffToPatch  : 'Full -> 'Delta -> Result<'Patch option, DomainError>)
-    (handlePatch  : int -> 'Patch -> Async<Result<'Result option, DomainError>>)
+    (handlePatch  : 'Key -> 'Patch -> Async<Result<'Result option, DomainError>>)
     (deltas       : AsyncSeq<Result<'Delta, DomainError>>)
     : AsyncSeq<Result<'Result, DomainError>> =
 
@@ -370,6 +380,7 @@ module EntityOps =
             | Error err     -> AsyncSeq.singleton (Error err))
 
   /// Core delta-update runner: fetch current state, diff, PATCH if changed.
+  /// Uses integer IDs (accounts, contacts). For string-keyed entities use DeltaUpdate.run directly.
   let executeDeltaUpdates<'Delta, 'Full, 'Patch, 'Result>
     (endpointOf  : string -> string -> string)
     (wrapUpdated : 'Full -> 'Result)
@@ -426,6 +437,48 @@ module Business =
     match business with
     | Full _ -> async.Return (Ok business)
     | Partial (key, fetch) -> fetch ()
+
+  let fetchBySlug (context: AccountingContext) (slug: string) : Async<Result<BusinessFull, DomainError>> =
+    async {
+      let! result = Http.getJson<NocfoApi.Types.Business> context.http (Endpoints.businessBySlug slug)
+      match result with
+      | Ok raw ->
+          let full : BusinessFull =
+            { key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug slug }
+              meta = { name = raw.name; country = Some raw.country }
+              raw  = raw }
+          return Ok full
+      | Error (NotFound _) ->
+          return Error (DomainError.Unexpected $"Business not found: {slug}")
+      | Error err ->
+          return Error (DomainError.Http err)
+    }
+
+  let diffToPatch (full: BusinessFull) (delta: BusinessDeltaRow) : Result<NocfoApi.Types.PatchedBusinessRequest option, DomainError> =
+    if full.key.slug <> delta.slug then
+      Error (DomainError.Unexpected $"Patched business slug {delta.slug} does not match fetched slug {full.key.slug}.")
+    else
+      let normalised = PatchShape<NocfoApi.Types.Business, NocfoApi.Types.PatchedBusinessRequest>.Normalize(full.raw, delta.patch)
+      if PatchShape<NocfoApi.Types.Business, NocfoApi.Types.PatchedBusinessRequest>.HasChanges normalised then Ok (Some normalised)
+      else Ok None
+
+  let executeDeltaUpdates (context: AccountingContext) (deltas: AsyncSeq<Result<BusinessDeltaRow, DomainError>>) : AsyncSeq<Result<BusinessResult, DomainError>> =
+    let handlePatch (slug: string) (patch: NocfoApi.Types.PatchedBusinessRequest) =
+      if context.options.dryRun then async {
+        eprintfn "[dry-run] PATCH %s %s" (Endpoints.businessBySlug slug) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
+        return Ok None
+      } else
+        Http.patchJson<NocfoApi.Types.PatchedBusinessRequest, NocfoApi.Types.Business>
+          context.http (Endpoints.businessBySlug slug) patch
+        |> AsyncResult.mapError DomainError.Http
+        |> AsyncResult.map (fun raw ->
+            let full : BusinessFull =
+              { key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug slug }
+                meta = { name = raw.name; country = Some raw.country }
+                raw  = raw }
+            Some (BusinessUpdated full))
+
+    DeltaUpdate.run (fun d -> d.slug) (fetchBySlug context) diffToPatch handlePatch deltas
 
 ///
 /// Account module operations
@@ -754,6 +807,40 @@ module Streams =
             |> AsyncResult.map (fun () -> ContactDeleted id)
 
     executeCommands context formatDryRun mapToOperation commands
+
+  let executeBusinessCommands
+    (context: AccountingContext)
+    (commands: AsyncSeq<Result<NocfoApi.Types.BusinessRequest, DomainError>>)
+    : AsyncSeq<Result<BusinessResult, DomainError>> =
+
+    let postBusiness (req: NocfoApi.Types.BusinessRequest) =
+      if context.options.dryRun then async {
+        eprintfn "[dry-run] POST /business/ %s" (Newtonsoft.Json.JsonConvert.SerializeObject req)
+        return Ok None
+      } else
+        Http.postJson<NocfoApi.Types.BusinessRequest, NocfoApi.Types.Business>
+          context.http Endpoints.businessListUrl req
+        |> AsyncResult.mapError DomainError.Http
+        |> AsyncResult.map (fun raw ->
+            let full : BusinessFull =
+              { key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug "(none)" }
+                meta = { name = raw.name; country = Some raw.country }
+                raw  = raw }
+            Some (BusinessCreated full))
+
+    asyncSeq {
+      try
+        yield!
+          commands
+          |> AsyncSeqResult.unwrapOrThrow
+          |> AsyncSeq.mapAsync postBusiness
+          |> AsyncSeq.collect (function
+              | Error err      -> AsyncSeq.singleton (Error err)
+              | Ok None        -> AsyncSeq.empty
+              | Ok (Some result) -> AsyncSeq.singleton (Ok result))
+      with
+      | DomainStreamException err -> yield Error err
+    }
 
 ///
 /// BusinessResolver module operations
