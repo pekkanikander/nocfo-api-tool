@@ -366,5 +366,5 @@ FodyWeavers.xsd
 # Hawaii generated
 hawaii-client/generated/obj
 
-# Temporary
-csv
+# Publish output
+dist/
