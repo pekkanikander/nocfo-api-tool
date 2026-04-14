@@ -72,7 +72,7 @@ Native AOT becomes viable only after PatchShape is rewritten as SRTP `inline` fu
 (types resolved statically at compile time; no reflection, no trimmer problem). That rewrite
 is a natural follow-on to the Phase 2.3 genericisation work and is the preferred eventual path.
 
-### 3.2 GitHub Actions CI pipeline — In progress
+### 3.2 GitHub Actions CI pipeline — Done
 
 Triggers: push to main, pull requests
 
@@ -88,7 +88,7 @@ Why after 3.1: CI is much easier to set up clean in the new repo than to retrofi
 
 ## Phase 4 — Completeness (finish what was deferred during exploration)
 
-### 4.1 Resolve the Hawaii fork
+### 4.1 Resolve the Hawaii fork — In progress (will take weeks)
 
 The local fork of Hawaii targets `net6.0` (EOL) and carries three patches.
 Options (in order of preference):
@@ -98,20 +98,35 @@ Options (in order of preference):
 3. Evaluate whether the generated code surface still justifies a generator at all
    (the API is larger now, so probably yes)
 
-### 4.2 Complete missing CLI commands
+### 4.2 Complete missing CLI commands — Done
 
-Currently unimplemented or stubbed:
+Command matrix (list/update/delete/create × businesses/accounts/contacts/documents):
 
-- `update businesses` (returns TODO exit code)
-- `create accounts`
-- `create businesses`
-- `delete` commands for most entity types
+| | list | update | delete | create |
+| --- | --- | --- | --- | --- |
+| businesses | ✅ | ✅ | — | ✅ |
+| accounts | ✅ | ✅ | ✅ | ✅ |
+| contacts | ✅ | ✅ | ✅ | ✅ |
+| documents | ✅ | — | ✅ | ✅ |
+
+`delete businesses` intentionally omitted.
+`update documents` deferred to 4.4.
 
 ### 4.3 Structured logging / observability
 
 - Ensure all progress/status output goes to stderr; data output to stdout (partially done)
 - Add `--verbose` flag for HTTP-level debug output (request/response bodies, timing)
 - Optional: `--log-format json` for machine-readable stderr (useful when scripting)
+
+### 4.4 Update documents
+
+`update documents` is the only remaining gap in the command matrix.
+`PatchedDocumentInstanceRequest` exists in the generated types.
+Implementation follows the account/contact `update` pattern:
+
+- Add `DocumentDelta = { id: int; patch: PatchedDocumentInstanceRequest }` with `Create`
+- Add `Document.fetchFull`, `Document.diffToPatch`, `Document.executeDeltaUpdates`
+- Wire `update documents` in `Program.fs` and add `Documents` to the `update` dispatch
 
 ---
 
