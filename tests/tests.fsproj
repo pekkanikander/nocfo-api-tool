@@ -20,6 +20,7 @@
     <Compile Include="PatchShapeTests.fs" />
     <Compile Include="StreamAlignmentTests.fs" />
     <Compile Include="DomainDiffTests.fs" />
+    <Compile Include="EntityOpsTests.fs" />
     <Compile Include="CsvTests.fs" />
   </ItemGroup>
 </Project>
