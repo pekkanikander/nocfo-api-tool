@@ -7,127 +7,21 @@ The pattern is settled; this roadmap fills in the gaps that were consciously def
 
 ## Phase 1 — Solid Foundation (do before anything else) - DONE
 
-Goal: make the existing functionality reliable and testable so it is safe to carry forward.
-
 ### 1.1 Error handling & retry — Done.
-
-File: `hawaii-client/src/Http.fs`
-
-- Add configurable timeout and cancellation token to all HTTP calls
-- Return structured error values (distinguish 401, 404, 429, 5xx, JSON parse failure)
-  rather than opaque strings — the CLI can then print actionable messages
-- Add exponential backoff with jitter for 429 and 5xx responses
-  (small helper inside Http.fs; no new library needed)
-
-Why first: everything else depends on reliable HTTP. Without this, any unattended run
-against a slightly flaky API is a gamble.
 
 ### 1.2 Unit test project for pure modules - Done
 
-New project: `tests/tests.fsproj` (xUnit)
-
-Priority targets (all pure F#, no API access needed):
-- `PatchShape` — normalization and HasChanges logic
-- `Streams.alignByKey` — alignment of sorted streams
-- `Domain` type conversions and delta diffing
-- `Csv` — round-trip read/write for typed records
-
-Why now: before migrating to a new repo, we want a test gate that catches regressions.
-These tests will also document the invariants of the core library.
-
 ### 1.3 Create top level `.slnx` — Done
 
-Create a top level `.slnx` file so that both `dotnet build` works (currently it doesn't)
-and that running all the tests in `tests` can be done according to the current best F# practices.
-
 ### 1.4 Migrate to a new clean repository — Done
-
-The current repo carries four failed iterations (v1-v4), many exploratory FSI scripts,
-and a git history that reflects experimentation rather than a product.
-
-What moves to the new repo:
-- `hawaii-client/generated/` — generated types and client
-- `hawaii-client/src/` — all hand-written source
-- `hawaii-client/hawaii-client.fsproj`
-- `hawaii-client/nocfo-api-hawaii.json`
-- `tools/` — CLI project
-- `vendor/Hawaii/` — generator submodule
-- `api/openapi.json` — OpenAPI spec
-- `tests/` — the new test project from step 1.2
-- `requests/` — VS Code REST client files
-- `CLAUDE.md`, `ROADMAP.md`, `README.md`, `LESSONS-LEARNED*.md`
-- top level `.fsproj` file
-
-What stays behind (this repo becomes the archive):
-- `v1-typescript/`, `v2-purescript/`, `v3-fsharp/`, `v4-fsharp/`
-- `hawaii-client/*.fsx` exploration scripts (or selectively promote the useful ones)
-- `csv/` real data files (sensitive; do not migrate to a public repo)
-- `v5-fsharp-hawaii.md` planning notes
-
-Steps:
-
-1. Create a new GitHub repo `nocfo-api-tool`
-2. Copy the selected files; do NOT clone the git history
-3. Initial commit, with a message like "Bootstrap from the nocfo-api-onboard exploration repo"
-4. Update `vendor/Hawaii/` as a submodule in the new repo
-5. Verify `dotnet build` and tests pass from scratch
-
----
 
 ## Phase 2 — Usability (make it safe and convenient to run)
 
 ### 2.1 Dry-run mode — Done
 
-Flag: `--dry-run` on all mutating commands (`update`, `create`, `delete`)
-
-Implementation: pass a `dryRun: bool` into `streamChanges`, `streamPatches`,
-`streamCreates` in `Streams.fs`; log the intended operation instead of executing it.
-
-Why: this is the single most important safety feature for production use. Without it,
-operators cannot preview what a CSV import will change before committing.
-
 ### 2.2 Named configuration profiles — Done
 
-File: `~/.config/nocfo/config.toml` (or TOML equivalent)
-
-```toml
-[profiles.test]
-token = "..."
-base_url = "https://api-tst.nocfo.io"
-
-[profiles.prod]
-token = "..."
-base_url = "https://api-prd.nocfo.io"
-```
-
-CLI flag: `--profile <name>` (overrides env vars; env vars still override config file)
-
-Argu supports layered config; this mostly needs plumbing in `Tools.fs` and `ToolConfig`.
-
-Why: juggling multiple env vars for cross-environment operations is fragile and error-prone.
-
 ### 2.3 Domain module de-duplication (SRTP genericisation) — Done
-
-File: `hawaii-client/src/Domain.fs`
-
-The `Account` and `Contact` modules contain near-identical implementations of
-`fetchFull`, `diffToPatch`, `deltasToCommands`, and `executeDeltaUpdates`.
-The same pattern will repeat verbatim for every new entity type.
-
-Collapse these into generic SRTP `inline` helpers (or regular generic functions taking
-endpoint builders and type parameters), so adding a new entity requires only its type
-definitions and a few lines of wiring — not a wholesale copy of ~100 lines per entity.
-
-Priority targets (in order):
-
-1. `fetchFull` → generic `fetchEntityById`
-2. `diffToPatch` → generic `diffEntity`
-3. `executeDeltaUpdates` → generic (the `handlePatch` lambda is the only variable part)
-4. `deltasToCommands` → generic (alignment strategy is the only variable part)
-5. `Streams.executeAccountCommands` / `executeContactCommands` → single generic `executeCommands`
-
-This aligns with the SRTP architectural direction described at the end of this roadmap.
-Do this before adding further entity types to avoid locking in the verbose per-entity pattern.
 
 ---
 
@@ -198,6 +92,7 @@ Why after 3.1: CI is much easier to set up clean in the new repo than to retrofi
 
 The local fork of Hawaii targets `net6.0` (EOL) and carries three patches.
 Options (in order of preference):
+
 1. Open PRs upstream for each patch; depend on a released Hawaii version
 2. If upstream is unresponsive: retarget the fork to `net10.0`
 3. Evaluate whether the generated code surface still justifies a generator at all
@@ -206,6 +101,7 @@ Options (in order of preference):
 ### 4.2 Complete missing CLI commands
 
 Currently unimplemented or stubbed:
+
 - `update businesses` (returns TODO exit code)
 - `create accounts`
 - `create businesses`
