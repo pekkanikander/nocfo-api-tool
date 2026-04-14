@@ -28,6 +28,7 @@ type ToolContext =
 type ToolConfigError =
     | MissingEnvironmentVariable of string
     | InvalidUri of envVar: string * value: string
+    | ProfileLoadError of profileName: string * message: string
 
 module Runtime =
 
@@ -62,36 +63,54 @@ module Runtime =
                 $"Missing required environment variable {name}."
             | InvalidUri (name, value) ->
                 $"Environment variable {name} must be an absolute URI (value: {value})."
+            | ProfileLoadError (name, message) ->
+                $"Cannot load profile '{name}': {message}"
 
         let createContext (cfg: ToolConfig) (input: TextReader) (output: TextWriter) (dryRun: bool) : ToolContext =
             let httpContext = Http.createHttpContext cfg.BaseUrl cfg.Token
             let accounting = Accounting.ofHttp httpContext dryRun
             { Config = cfg; Accounting = accounting; Input = input; Output = output }
 
-        let fromEnvironment () =
-            let parseBaseUrl envVar defaultValue =
-                match tryEnv envVar with
-                | None -> Ok (Uri defaultValue)
-                | Some value ->
-                    match Uri.TryCreate(value, UriKind.Absolute) with
-                    | true, uri -> Ok uri
-                    | false, _ -> Error (InvalidUri (envVar, value))
+        let fromSources (profile: string option) =
+            let profileResult =
+                match profile with
+                | None ->
+                    Ok ({ Token = None; BaseUrl = None; SourceToken = None; SourceBaseUrl = None } : ProfileSettings)
+                | Some name ->
+                    match Config.loadProfile name with
+                    | Ok settings -> Ok settings
+                    | Error msg -> Error [ ProfileLoadError (name, msg) ]
+
+            match profileResult with
+            | Error errs -> Error errs
+            | Ok p ->
+
+            let parseUri label value =
+                match Uri.TryCreate(value, UriKind.Absolute) with
+                | true, uri -> Ok uri
+                | false, _ -> Error (InvalidUri (label, value))
+
+            let tryUri envVar =
+                tryEnv envVar |> Option.map (parseUri envVar)
 
             let targetBaseUrlResult =
-                match tryEnv TargetBaseUrlVar with
-                | Some value ->
-                    match Uri.TryCreate(value, UriKind.Absolute) with
-                    | true, uri -> Ok uri
-                    | false, _ -> Error (InvalidUri (TargetBaseUrlVar, value))
-                | None -> parseBaseUrl BaseUrlVar DefaultBaseUrl
+                match tryUri TargetBaseUrlVar with
+                | Some result -> result
+                | None ->
+                    match tryUri BaseUrlVar with
+                    | Some result -> result
+                    | None ->
+                        match p.BaseUrl with
+                        | Some v -> parseUri "profile: base_url" v
+                        | None -> Ok (Uri DefaultBaseUrl)
 
             let sourceBaseUrlResult =
-                match tryEnv SourceBaseUrlVar with
-                | None -> Ok (Uri DefaultSourceBaseUrl)
-                | Some value ->
-                    match Uri.TryCreate(value, UriKind.Absolute) with
-                    | true, uri -> Ok uri
-                    | false, _ -> Error (InvalidUri (SourceBaseUrlVar, value))
+                match tryUri SourceBaseUrlVar with
+                | Some result -> result
+                | None ->
+                    match p.SourceBaseUrl with
+                    | Some v -> parseUri "profile: source_base_url" v
+                    | None -> Ok (Uri DefaultSourceBaseUrl)
 
             let targetTokenResult =
                 match tryEnv TargetTokenVar with
@@ -99,9 +118,15 @@ module Runtime =
                 | None ->
                     match tryEnv TokenVar with
                     | Some token -> Ok token
-                    | None -> Error (MissingEnvironmentVariable $"{TargetTokenVar} (fallback: {TokenVar})")
+                    | None ->
+                        match p.Token with
+                        | Some token -> Ok token
+                        | None -> Error (MissingEnvironmentVariable $"{TargetTokenVar} (fallback: {TokenVar})")
 
-            let sourceToken = tryEnv SourceTokenVar
+            let sourceToken =
+                match tryEnv SourceTokenVar with
+                | Some t -> Some t
+                | None -> p.SourceToken
 
             match targetBaseUrlResult, targetTokenResult, sourceBaseUrlResult with
             | Ok baseUrl, Ok token, Ok sourceBaseUrl ->
@@ -109,20 +134,14 @@ module Runtime =
             | _ ->
                 let errors =
                     [
-                        match targetBaseUrlResult with
-                        | Error e -> yield e
-                        | _ -> ()
-                        match targetTokenResult with
-                        | Error e -> yield e
-                        | _ -> ()
-                        match sourceBaseUrlResult with
-                        | Error e -> yield e
-                        | _ -> ()
+                        match targetBaseUrlResult with Error e -> yield e | _ -> ()
+                        match targetTokenResult with Error e -> yield e | _ -> ()
+                        match sourceBaseUrlResult with Error e -> yield e | _ -> ()
                     ]
                 Error errors
 
-        let loadOrFail (input: TextReader) (output: TextWriter) (dryRun: bool): ToolContext =
-            match fromEnvironment () with
+        let loadOrFail (profile: string option) (input: TextReader) (output: TextWriter) (dryRun: bool): ToolContext =
+            match fromSources profile with
             | Ok cfg -> createContext cfg input output dryRun
             | Error errors ->
                 let errorMessages = errors |> List.map describeError |> String.concat "\n"

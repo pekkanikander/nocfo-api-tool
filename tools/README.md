@@ -104,22 +104,61 @@ Use `--out`/`--in` if you prefer explicit file paths over shell redirection.
 
 ## Configuration and runtime
 
-`Nocfo.Tools.Runtime.ToolConfig` reads the environment and builds a `ToolContext`:
+`Nocfo.Tools.Runtime.ToolConfig` builds a `ToolContext` from two sources, lowest-priority first:
+
+1. **Named profile** (from `~/.config/nocfo/config.toml`, selected with `--profile <name>`)
+2. **Environment variables** (always override the profile)
+
+### Named profiles
+
+Create `~/.config/nocfo/config.toml`:
+
+```toml
+[profiles.test]
+token    = "your-test-token"
+base_url = "https://api-tst.nocfo.io"
+
+[profiles.prod]
+token    = "your-prod-token"
+base_url = "https://api-prd.nocfo.io"
+
+# Cross-environment profiles also support source_token / source_base_url
+[profiles.prod-to-test]
+token          = "your-test-token"
+base_url       = "https://api-tst.nocfo.io"
+source_token   = "your-prod-token"
+source_base_url = "https://api-prd.nocfo.io"
+```
+
+Pass `--profile <name>` (or `-p <name>`) as a top-level flag:
+
+```bash
+dotnet run --project tools -- --profile prod list businesses
+```
+
+If `NOCFO_TOOL_CONFIG_HOME` is set, the config file is read from
+`$NOCFO_TOOL_CONFIG_HOME/config.toml` instead of `~/.config/nocfo/config.toml`.
+
+Specifying an unknown profile or a missing config file is a hard error (`EX_CONFIG`).
+Env vars set alongside `--profile` still take precedence over the profile values.
+
+### Environment variables
 
 - Target/default context:
-  - `NOCFO_TARGET_TOKEN` (fallback: `NOCFO_TOKEN`)
-  - `NOCFO_TARGET_BASE_URL` (fallback: `NOCFO_BASE_URL`, default `https://api-tst.nocfo.io`)
+  - `NOCFO_TARGET_TOKEN` (fallback: `NOCFO_TOKEN`, then profile `token`)
+  - `NOCFO_TARGET_BASE_URL` (fallback: `NOCFO_BASE_URL`, then profile `base_url`, default `https://api-tst.nocfo.io`)
 - Source context (used by dual-environment commands):
-  - `NOCFO_SOURCE_TOKEN`
-  - `NOCFO_SOURCE_BASE_URL` (default `https://api-prd.nocfo.io`)
+  - `NOCFO_SOURCE_TOKEN` (fallback: profile `source_token`)
+  - `NOCFO_SOURCE_BASE_URL` (fallback: profile `source_base_url`, default `https://api-prd.nocfo.io`)
 
 The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` from
 `hawaii-client`, plus the active stdin/stdout handles.
 
 ## Internals
 
-- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`). `--fields` and `--format` live at the entity level.
-- **Runtime + Streams** (`Tools.fs`): resolves env vars, builds `AccountingContext`, and routes CSV readers/writers.
+- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`). `--fields`, `--profile`, and `--dry-run` live at the top level.
+- **Config** (`Config.fs`): reads `~/.config/nocfo/config.toml` and resolves a named profile into `ProfileSettings`.
+- **Runtime + Streams** (`Tools.fs`): layers profile settings under env vars, builds `AccountingContext`, and routes CSV readers/writers.
 - **Program flow** (`Program.fs`):
   - `list` commands: stream via `Streams.streamBusinesses`, `Streams.streamAccounts`, `Streams.streamContacts`, or `Streams.streamDocuments`, hydrate rows (`Streams.hydrateAndUnwrap`), write CSV lazily.
   - `update` accounts/contacts: read CSV into repo-owned delta records (`AccountDelta` / `ContactDelta`), fetch the current entity for each CSV `id`, normalize against that fresh API state, and PATCH immediately when something changed.
@@ -131,8 +170,6 @@ Everything runs on `AsyncSeq`, so listing scales to large datasets without holdi
 
 ## Limitations / future work
 
-- No retries or backoff; transient HTTP failures halt the stream.
-- No dry-run mode—`update` and `delete` execute immediately once the CSV is read.
 - Business updates and account creation are placeholders.
 - `update` trades extra GET requests for streaming-friendly semantics; very large CSV updates will be network-bound.
 - `--format` is hard-wired to CSV; JSON or Parquet would require additional mapping.

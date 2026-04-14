@@ -86,7 +86,7 @@ Implementation: pass a `dryRun: bool` into `streamChanges`, `streamPatches`,
 Why: this is the single most important safety feature for production use. Without it,
 operators cannot preview what a CSV import will change before committing.
 
-### 2.2 Named configuration profiles
+### 2.2 Named configuration profiles — Done
 
 File: `~/.config/nocfo/config.toml` (or TOML equivalent)
 

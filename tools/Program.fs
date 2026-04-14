@@ -613,7 +613,8 @@ let main argv =
 
         try
             let dryRun = results.Contains(CliArgs.DryRun)
-            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail input output dryRun
+            let profile = results.TryGetResult CliArgs.Profile
+            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun
 
             let subcommand = results.GetSubCommand()
             return!

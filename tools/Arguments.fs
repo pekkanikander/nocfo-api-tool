@@ -68,6 +68,7 @@ type CreateEntitiesArgs =
 type CliArgs =
     | [< AltCommandLine("-o") >]                  Out     of outPath: string
     | [< AltCommandLine("-i") >]                  In      of inPath: string
+    | [< AltCommandLine("-p") >]                  Profile of profileName: string
     | [< AltCommandLine("-n") >]                  DryRun
     | [< NoPrefix; SubCommand >]                  List    of ParseResults<EntitiesArgs>
     | [< NoPrefix; SubCommand >]                  Update  of ParseResults<EntitiesArgs>
@@ -79,6 +80,7 @@ type CliArgs =
             match this with
             | Out _        -> "Optional CSV output path (default stdout)."
             | In _         -> "Optional CSV input path (default stdin)."
+            | Profile _    -> "Named configuration profile from ~/.config/nocfo/config.toml."
             | DryRun       -> "Print what would be done without executing any mutations."
             | List _       -> "List entities (businesses, accounts, etc.)."
             | Update _     -> "Update an entity (business, account, etc.)."

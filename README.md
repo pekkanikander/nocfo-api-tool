@@ -23,13 +23,19 @@ entities, writes them as CSV, and can reconcile edited rows back to the server.
 1. **Prerequisites**
    - .NET 10 SDK (`dotnet --version` ≥ 10.0)
    - macOS or Linux shell (the code itself is cross-platform)
-   - `NOCFO_TARGET_TOKEN` (or fallback `NOCFO_TOKEN`) exported; optionally `NOCFO_TARGET_BASE_URL` (defaults to `https://api-tst.nocfo.io`)
-   - `NOCFO_SOURCE_TOKEN` only when running dual-environment commands like `map accounts`
+   - Auth token and base URL supplied via either a **named profile** or **environment variables**:
+     - Named profile: create `~/.config/nocfo/config.toml` (see `tools/README.md`) and pass `--profile <name>`
+     - Environment variables: `NOCFO_TARGET_TOKEN` (or fallback `NOCFO_TOKEN`); optionally `NOCFO_TARGET_BASE_URL` (defaults to `https://api-tst.nocfo.io`)
+   - `NOCFO_SOURCE_TOKEN` (or a profile with `source_token`) only when running dual-environment commands like `map accounts`
    - If a local `.env` exists, you may `source .env` to populate tokens and aliases for your shell session.
      The GitHub version of this repo does not include `.env`.
 
    ```bash
+   # Option A: env vars
    export NOCFO_TOKEN="paste-your-token"
+
+   # Option B: named profile (see tools/README.md for config file format)
+   # dotnet run --project tools -- --profile test list businesses
    ```
 
 2. **Build once and run tests** (from repo root):
@@ -104,6 +110,9 @@ entities, writes them as CSV, and can reconcile edited rows back to the server.
 
 ### CLI Notes
 
+- `--profile <name>` / `-p <name>` selects a named profile from `~/.config/nocfo/config.toml`.
+  Environment variables always override profile values when both are set.
+- `--dry-run` prints what mutations would be sent without executing them.
 - `--fields` controls both which columns are emitted and which columns are read back.
   `id` is always required when executing updates or deletes.
 - Output defaults to stdout and input defaults to stdin;
