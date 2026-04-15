@@ -1,8 +1,8 @@
 module Nocfo.CsvHelpers
-// Minimal CsvHelper support for F#-specific shapes (option<'a>, list<'a>, and JToken)
+// Minimal CsvHelper support for F#-specific shapes (option<'a>, list<'a>, and raw JSON
+// via System.Text.Json.JsonElement).
 // Usage:
-//   #r "nuget: CsvHelper, 30.0.1"
-//   #r "nuget: Newtonsoft.Json, 13.0.1"
+//   #r "nuget: CsvHelper, 33.0.0"
 //   #load "src/CsvHelper.fs"
 //   open Nocfo.CsvHelpers
 //   use csv = new CsvWriter(writer, CsvConfiguration(CultureInfo.InvariantCulture))
@@ -13,12 +13,12 @@ module Nocfo.CsvHelpers
 open System
 open System.Reflection
 open System.Globalization
+open System.Text.Json
 open Microsoft.FSharp.Reflection
 open CsvHelper
 open CsvHelper.Configuration
 open CsvHelper.TypeConversion
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
+open Nocfo.JsonHelpers
 
 // --- Shape detection helpers ---
 
@@ -45,6 +45,7 @@ type OptionConverter<'a>() =
             | null -> ""
             | :? IFormattable as f -> f.ToString(null, CultureInfo.InvariantCulture)
             | :? string as s -> s
+            | :? JsonElement as e -> elementToCompactString e
             | v -> v.ToString()
         else ""
 
@@ -59,17 +60,16 @@ type SeqJoinConverter<'a>() =
                 | null -> ""
                 | :? IFormattable as f -> f.ToString(null, CultureInfo.InvariantCulture)
                 | :? string as s -> s
-                // Fallback: JSON-encode complex items compactly
-                | :? JToken as jt -> jt.ToString(Formatting.None)
-                | v -> JsonConvert.SerializeObject(v))
+                | :? JsonElement as e -> elementToCompactString e
+                | v -> serializeUntyped v)
             |> String.concat ";"
         | _ -> ""
 
-type JTokenCompactConverter() =
+type JsonElementCompactConverter() =
     inherit DefaultTypeConverter()
     override _.ConvertToString(value, memberMapData, row) =
         match value with
-        | :? JToken as jt -> jt.ToString(Formatting.None)
+        | :? JsonElement as e -> elementToCompactString e
         | null -> ""
         | v -> v.ToString()
 
@@ -88,8 +88,8 @@ let registerFSharpConvertersFor (context: CsvContext) (t: Type) =
             let convT = typedefof<SeqJoinConverter<_>>.MakeGenericType [| inner |]
             let conv  = Activator.CreateInstance(convT) :?> ITypeConverter
             cache.AddConverter(pt, conv) |> ignore
-        elif typeof<JToken>.IsAssignableFrom(pt) then
-            cache.AddConverter(pt, JTokenCompactConverter()) |> ignore
+        elif pt = typeof<JsonElement> then
+            cache.AddConverter(pt, JsonElementCompactConverter()) |> ignore
         else
             ()
 
