@@ -13,6 +13,7 @@
     <Compile Include="Config.fs" />
     <Compile Include="Tools.fs" />
     <Compile Include="Arguments.fs" />
+    <Compile Include="BlueprintJson.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

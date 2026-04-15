@@ -2,10 +2,10 @@ open System
 open System.IO
 open Argu
 open FSharp.Control
-open Newtonsoft.Json.Linq
 open Nocfo.Domain
 open Nocfo.Tools.Arguments
 open Nocfo.Tools
+open Nocfo.Tools.BlueprintJson
 
 module ExitCodes =
     [<Literal>]
@@ -385,101 +385,6 @@ let map (toolContext: ToolContext) (args: ParseResults<MapEntitiesArgs>) =
             match entityTypeAndArgs with
             | MapEntitiesArgs.Accounts accountArgs -> mapAccounts toolContext accountArgs
     }
-
-let private emptyBlueprint : JToken =
-    JObject.Parse("""{
-  "debet_account_id": null,
-  "debet_entries": [],
-  "credit_account_id": null,
-  "credit_entries": [],
-  "expense_entries": []
-}""")
-
-let private tryAsInt (token: JToken) =
-    match token.Type with
-    | JTokenType.Integer -> Some (token.Value<int>())
-    | _ -> None
-
-let private remapObjectAccountId (accountIdMap: Map<int, int>) (key: string) (container: JObject) =
-    match container.TryGetValue key with
-    | true, value when value.Type = JTokenType.Null -> Ok ()
-    | true, value ->
-        match tryAsInt value with
-        | Some sourceId ->
-            match Map.tryFind sourceId accountIdMap with
-            | Some targetId ->
-                container.[key] <- JValue(targetId)
-                Ok ()
-            | None ->
-                Error (DomainError.Unexpected $"Missing account-id mapping for {key}={sourceId}.")
-        | None ->
-            Error (DomainError.Unexpected $"Expected integer for {key}, got {value.Type}.")
-    | false, _ -> Ok ()
-
-let private remapEntryArrayAccountIds (accountIdMap: Map<int, int>) (key: string) (container: JObject) =
-    match container.TryGetValue key with
-    | true, (:? JArray as entries) ->
-        entries
-        |> Seq.fold (fun state entry ->
-            match state with
-            | Error _ -> state
-            | Ok () ->
-                match entry with
-                | :? JObject as entryObj ->
-                    match entryObj.TryGetValue "account_id" with
-                    | true, value when value.Type = JTokenType.Null -> Ok ()
-                    | true, value ->
-                        match tryAsInt value with
-                        | Some sourceId ->
-                            match Map.tryFind sourceId accountIdMap with
-                            | Some targetId ->
-                                entryObj.["account_id"] <- JValue(targetId)
-                                Ok ()
-                            | None ->
-                                Error (DomainError.Unexpected $"Missing account-id mapping for {key}.account_id={sourceId}.")
-                        | None ->
-                            Error (DomainError.Unexpected $"Expected integer for {key}.account_id, got {value.Type}.")
-                    | false, _ -> Ok ()
-                | _ ->
-                    Error (DomainError.Unexpected $"Expected object entries under {key}."))
-            (Ok ())
-    | true, value ->
-        Error (DomainError.Unexpected $"Expected array for {key}, got {value.Type}.")
-    | false, _ -> Ok ()
-
-let private remapBlueprint (strict: bool) (accountIdMap: Map<int, int>) (row: DocumentCreatePayload) =
-    match row.blueprint with
-    | None -> Ok row
-    | Some blueprint ->
-        match blueprint with
-        | :? JObject as blueprintObj ->
-            let mutable remapError : DomainError option = None
-            let apply result =
-                match remapError, result with
-                | None, Error err -> remapError <- Some err
-                | _ -> ()
-
-            apply (remapObjectAccountId accountIdMap "debet_account_id" blueprintObj)
-            apply (remapObjectAccountId accountIdMap "credit_account_id" blueprintObj)
-            apply (remapEntryArrayAccountIds accountIdMap "debet_entries" blueprintObj)
-            apply (remapEntryArrayAccountIds accountIdMap "credit_entries" blueprintObj)
-            apply (remapEntryArrayAccountIds accountIdMap "expense_entries" blueprintObj)
-
-            match remapError with
-            | None ->
-                Ok { row with blueprint = Some blueprintObj }
-            | Some err ->
-                if strict then
-                    Error err
-                else
-                    eprintfn "Warning: %A; replacing blueprint with empty blueprint." err
-                    Ok { row with blueprint = Some (emptyBlueprint.DeepClone()) }
-        | _ ->
-            if strict then
-                Error (DomainError.Unexpected $"Expected blueprint JSON object, got {blueprint.Type}.")
-            else
-                eprintfn "Warning: invalid blueprint shape (%A); replacing blueprint with empty blueprint." blueprint.Type
-                Ok { row with blueprint = Some (emptyBlueprint.DeepClone()) }
 
 let private loadAccountIdMap (mapPath: string) =
     async {
