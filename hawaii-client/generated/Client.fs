@@ -46,9 +46,12 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///`Authorization: Token &amp;lt;jwt&amp;gt;`
     ///Business scoping: when provided, the `business_slug` is embedded in the JWT. The token is only valid for the business whose slug was requested, and requests must match that slug in the business context.
     ///</summary>
-    member this.AuthJwtCreate(body: GetJwtTokenRequestRequest, ?cancellationToken: CancellationToken) =
+    member this.AuthJwtCreate(?cancellationToken: CancellationToken, ?body: GetJwtTokenRequestRequest) =
         async {
-            let requestParts = [ RequestPart.jsonContent body ]
+            let requestParts =
+                [ if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
+
             let! (status, content) = OpenApiHttp.postAsync httpClient "/auth/jwt/" requestParts cancellationToken
 
             match int status with
@@ -137,18 +140,19 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///Update the currently selected business (`business_slug`). Use this for business settings and metadata updates.
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.SettingsBusinessUpdate
         (
             businessSlug: string,
-            body: PatchedBusinessRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedBusinessRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync httpClient "/v1/business/{business_slug}/" requestParts cancellationToken
@@ -329,20 +333,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="accountId">Identifier of the target account. Use the corresponding list endpoint to discover valid IDs.</param>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingAccountUpdate
         (
             accountId: int,
             businessSlug: string,
-            body: PatchedAccountRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedAccountRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("account_id", accountId)
                   RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -732,20 +737,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="contactId">Identifier of the target contact. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.InvoicingContactUpdate
         (
             businessSlug: string,
             contactId: int,
-            body: PatchedContactRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedContactRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("contact_id", contactId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -875,18 +881,19 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///Create an accounting document for the selected business. On create, entries are generated from `blueprint`.
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingDocumentCreate
         (
             businessSlug: string,
-            body: DocumentListRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: DocumentListRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync httpClient "/v1/business/{business_slug}/document/" requestParts cancellationToken
@@ -926,20 +933,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="documentId">Identifier of the target document. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingDocumentReplace
         (
             businessSlug: string,
             documentId: int,
-            body: DocumentInstanceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: DocumentInstanceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("document_id", documentId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.putAsync
@@ -956,20 +964,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="documentId">Identifier of the target document. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingDocumentUpdate
         (
             businessSlug: string,
             documentId: int,
-            body: PatchedDocumentInstanceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedDocumentInstanceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("document_id", documentId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -1042,14 +1051,15 @@ type NocfoApiClient(httpClient: HttpClient) =
         (
             businessSlug: string,
             documentId: int,
-            body: DocumentInstanceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: DocumentInstanceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("document_id", documentId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync
@@ -1139,14 +1149,15 @@ type NocfoApiClient(httpClient: HttpClient) =
         (
             businessSlug: string,
             documentId: int,
-            body: DocumentInstanceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: DocumentInstanceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("document_id", documentId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync
@@ -1381,22 +1392,23 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="documentId">Identifier of the target document. Use the corresponding list endpoint to discover valid IDs.</param>
     ///<param name="relationId">Identifier of the target relation. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingDocumentRelationUpdate
         (
             businessSlug: string,
             documentId: int,
             relationId: int,
-            body: PatchedDocumentRelationRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedDocumentRelationRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("document_id", documentId)
                   RequestPart.path ("relation_id", relationId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -1490,18 +1502,19 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///Preview document relation suggestions from a draft blueprint and optional filters (date, contact, excluded document IDs) without persisting a document.
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingDocumentRelationSuggestionsPreview
         (
             businessSlug: string,
-            body: DocumentRelationSuggestionPreviewRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: DocumentRelationSuggestionPreviewRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync
@@ -1645,20 +1658,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="fileId">Identifier of the target file. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingFileUpdate
         (
             businessSlug: string,
             fileId: int,
-            body: PatchedAttachmentInstanceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedAttachmentInstanceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("file_id", fileId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -1890,20 +1904,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="identifierId">Identifier of the target identifier. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.SettingsBusinessIdentifierUpdate
         (
             businessSlug: string,
             identifierId: int,
-            body: PatchedBusinessIdentifierRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedBusinessIdentifierRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("identifier_id", identifierId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -1994,18 +2009,19 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///Create a new accounting period for the selected business (`business_slug`).
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.ReportingAccountingPeriodCreate
         (
             businessSlug: string,
-            body: PeriodRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PeriodRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync httpClient "/v1/business/{business_slug}/period/" requestParts cancellationToken
@@ -2045,20 +2061,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="periodId">Identifier of the target period. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.ReportingAccountingPeriodReplace
         (
             businessSlug: string,
             periodId: int,
-            body: PeriodRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PeriodRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("period_id", periodId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.putAsync
@@ -2075,20 +2092,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="periodId">Identifier of the target period. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.ReportingAccountingPeriodUpdate
         (
             businessSlug: string,
             periodId: int,
-            body: PatchedPeriodRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedPeriodRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("period_id", periodId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -2375,13 +2393,14 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///Create a tag for the selected business.
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
-    member this.BookkeepingTagCreate(businessSlug: string, body: TagRequest, ?cancellationToken: CancellationToken) =
+    ///<param name="body"></param>
+    member this.BookkeepingTagCreate(businessSlug: string, ?cancellationToken: CancellationToken, ?body: TagRequest) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync httpClient "/v1/business/{business_slug}/tags/" requestParts cancellationToken
@@ -2416,20 +2435,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="tagId">Identifier of the target tag. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingTagReplace
         (
             businessSlug: string,
             tagId: int,
-            body: TagRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: TagRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("tag_id", tagId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.putAsync
@@ -2446,20 +2466,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="tagId">Identifier of the target tag. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.BookkeepingTagUpdate
         (
             businessSlug: string,
             tagId: int,
-            body: PatchedTagRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedTagRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("tag_id", tagId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -2529,18 +2550,19 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///Create a new VAT period for the selected business (`business_slug`).
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.ReportingVatPeriodCreate
         (
             businessSlug: string,
-            body: VatPeriodRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: VatPeriodRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.postAsync
@@ -2584,20 +2606,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="vatPeriodId">Identifier of the target vat period. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.ReportingVatPeriodReplace
         (
             businessSlug: string,
             vatPeriodId: int,
-            body: VatPeriodRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: VatPeriodRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("vat_period_id", vatPeriodId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.putAsync
@@ -2614,20 +2637,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="vatPeriodId">Identifier of the target vat period. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.ReportingVatPeriodUpdate
         (
             businessSlug: string,
             vatPeriodId: int,
-            body: PatchedVatPeriodRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedVatPeriodRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("vat_period_id", vatPeriodId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -2835,20 +2859,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="invoiceId">Identifier of the target invoice. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.InvoicingSalesInvoiceUpdate
         (
             businessSlug: string,
             invoiceId: int,
-            body: PatchedInvoiceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedInvoiceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("invoice_id", invoiceId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -3251,20 +3276,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="productId">Identifier of the target product. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.InvoicingProductUpdate
         (
             businessSlug: string,
             productId: int,
-            body: PatchedProductRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedProductRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("product_id", productId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -3444,20 +3470,21 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///</summary>
     ///<param name="businessSlug">Business slug that scopes this request. If you do not have one yet, call `common_accessible_businesses_list` and pick a slug from the response.</param>
     ///<param name="purchaseInvoiceId">Identifier of the target purchase invoice. Use the corresponding list endpoint to discover valid IDs.</param>
-    ///<param name="body"></param>
     ///<param name="cancellationToken"></param>
+    ///<param name="body"></param>
     member this.InvoicingPurchaseInvoiceUpdate
         (
             businessSlug: string,
             purchaseInvoiceId: int,
-            body: PatchedPurchaseInvoiceRequest,
-            ?cancellationToken: CancellationToken
+            ?cancellationToken: CancellationToken,
+            ?body: PatchedPurchaseInvoiceRequest
         ) =
         async {
             let requestParts =
                 [ RequestPart.path ("business_slug", businessSlug)
                   RequestPart.path ("purchase_invoice_id", purchaseInvoiceId)
-                  RequestPart.jsonContent body ]
+                  if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
 
             let! (status, content) =
                 OpenApiHttp.patchAsync
@@ -3509,9 +3536,12 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///<summary>
     ///Replace the currently authenticated user profile (full body). This endpoint is always scoped to the caller and does not accept a user ID.
     ///</summary>
-    member this.IdentityUserReplace(body: CurrentUserRequest, ?cancellationToken: CancellationToken) =
+    member this.IdentityUserReplace(?cancellationToken: CancellationToken, ?body: CurrentUserRequest) =
         async {
-            let requestParts = [ RequestPart.jsonContent body ]
+            let requestParts =
+                [ if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
+
             let! (status, content) = OpenApiHttp.putAsync httpClient "/v1/user/" requestParts cancellationToken
             return IdentityUserReplace.OK(Serializer.deserialize content)
         }
@@ -3519,9 +3549,12 @@ type NocfoApiClient(httpClient: HttpClient) =
     ///<summary>
     ///Update the currently authenticated user profile. This endpoint is always scoped to the caller and does not accept a user ID.
     ///</summary>
-    member this.IdentityUserUpdate(body: PatchedCurrentUserRequest, ?cancellationToken: CancellationToken) =
+    member this.IdentityUserUpdate(?cancellationToken: CancellationToken, ?body: PatchedCurrentUserRequest) =
         async {
-            let requestParts = [ RequestPart.jsonContent body ]
+            let requestParts =
+                [ if body.IsSome then
+                      RequestPart.jsonContent body.Value ]
+
             let! (status, content) = OpenApiHttp.patchAsync httpClient "/v1/user/" requestParts cancellationToken
             return IdentityUserUpdate.OK(Serializer.deserialize content)
         }

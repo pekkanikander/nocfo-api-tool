@@ -579,7 +579,7 @@ type Account =
       ///* `EXP_TAX` - Verotili
       ///* `EXP_TAX_PRE` - Ennakkoverot
       ``type``: Option<Type92dEnum>
-      default_vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_code: Option<System.Text.Json.JsonElement>
       default_vat_rate: float
       ///* `standard` - STANDARD
       ///* `reduced_a` - REDUCED_A
@@ -668,7 +668,7 @@ type AccountList =
       ///* `EXP_TAX` - Verotili
       ///* `EXP_TAX_PRE` - Ennakkoverot
       ``type``: Option<Type92dEnum>
-      default_vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_code: Option<System.Text.Json.JsonElement>
       default_vat_rate: float
       ///* `standard` - STANDARD
       ///* `reduced_a` - REDUCED_A
@@ -743,7 +743,7 @@ type AccountListRequest =
       ///* `EXP_TAX` - Verotili
       ///* `EXP_TAX_PRE` - Ennakkoverot
       ``type``: Option<Type92dEnum>
-      default_vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_code: Option<System.Text.Json.JsonElement>
       ///* `standard` - STANDARD
       ///* `reduced_a` - REDUCED_A
       ///* `reduced_b` - REDUCED_B
@@ -799,7 +799,7 @@ type AccountRequest =
       ///* `EXP_TAX` - Verotili
       ///* `EXP_TAX_PRE` - Ennakkoverot
       ``type``: Option<Type92dEnum>
-      default_vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_code: Option<System.Text.Json.JsonElement>
       ///* `standard` - STANDARD
       ///* `reduced_a` - REDUCED_A
       ///* `reduced_b` - REDUCED_B
@@ -838,9 +838,9 @@ type AccountingReportJsonResponse =
 
 type AttachmentAnalysis =
     { values: list<AttachmentAnalysisValue>
-      analysis_data: Newtonsoft.Json.Linq.JToken }
+      analysis_data: System.Text.Json.JsonElement }
     ///Creates an instance of AttachmentAnalysis with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (values: list<AttachmentAnalysisValue>, analysis_data: Newtonsoft.Json.Linq.JToken): AttachmentAnalysis =
+    static member Create (values: list<AttachmentAnalysisValue>, analysis_data: System.Text.Json.JsonElement): AttachmentAnalysis =
         { values = values
           analysis_data = analysis_data }
 
@@ -882,7 +882,7 @@ type AttachmentInstance =
       file: string
       name: string
       ``type``: string
-      preview: Option<Newtonsoft.Json.Linq.JToken>
+      preview: Option<System.Text.Json.JsonElement>
       folder_id: Option<int>
       blurhash: Option<string>
       blurhash_w: Option<int>
@@ -903,7 +903,7 @@ type AttachmentInstance =
                           file: string,
                           name: string,
                           ``type``: string,
-                          preview: Option<Newtonsoft.Json.Linq.JToken>,
+                          preview: Option<System.Text.Json.JsonElement>,
                           blurhash: Option<string>,
                           blurhash_w: Option<int>,
                           blurhash_h: Option<int>,
@@ -948,7 +948,7 @@ type AttachmentList =
       name: string
       ``type``: string
       file: string
-      preview: Option<Newtonsoft.Json.Linq.JToken>
+      preview: Option<System.Text.Json.JsonElement>
       folder_id: Option<int>
       blurhash: Option<string>
       blurhash_w: Option<int>
@@ -966,7 +966,7 @@ type AttachmentList =
                           name: string,
                           ``type``: string,
                           file: string,
-                          preview: Option<Newtonsoft.Json.Linq.JToken>,
+                          preview: Option<System.Text.Json.JsonElement>,
                           blurhash: Option<string>,
                           blurhash_w: Option<int>,
                           blurhash_h: Option<int>): AttachmentList =
@@ -1026,7 +1026,7 @@ type BlueprintEntry =
       ///VAT method for this entry: `0` (gross posting) or `1` (net posting).
       ///* `0` - Bruttokirjaus
       ///* `1` - Nettokirjaus
-      vat_method: Option<Newtonsoft.Json.Linq.JToken>
+      vat_method: Option<System.Text.Json.JsonElement>
       ///The amount of this entry, in the smallest currency unit (e.g., cents).
       amount: Option<float32> }
     ///Creates an instance of BlueprintEntry with all optional fields initialized to None. The required fields are parameters of this function
@@ -1050,7 +1050,7 @@ type BlueprintEntryRequest =
       ///VAT method for this entry: `0` (gross posting) or `1` (net posting).
       ///* `0` - Bruttokirjaus
       ///* `1` - Nettokirjaus
-      vat_method: Option<Newtonsoft.Json.Linq.JToken>
+      vat_method: Option<System.Text.Json.JsonElement>
       ///The amount of this entry, in the smallest currency unit (e.g., cents).
       amount: Option<float32> }
     ///Creates an instance of BlueprintEntryRequest with all optional fields initialized to None. The required fields are parameters of this function
@@ -1092,7 +1092,7 @@ type Business =
       slug: Option<string>
       business_id: Option<string>
       country: string
-      country_config: Newtonsoft.Json.Linq.JToken
+      country_config: System.Text.Json.JsonElement
       period_id: Option<int>
       is_billable: bool
       vat_period_id: Option<int>
@@ -1115,7 +1115,7 @@ type Business =
       ///* `DE_UG` - Saksalainen yrittäjäosakeyhtiö (UG)
       ///* `DEMO` - Demo-yritys
       form: Option<FormEnum>
-      default_vat_period: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_period: Option<System.Text.Json.JsonElement>
       invoicing_default_penalty_interest: Option<float>
       invoicing_default_payment_condition_days: Option<int>
       invoicing_default_email_subject: Option<string>
@@ -1191,7 +1191,7 @@ type Business =
                           logo: Option<string>,
                           name: string,
                           country: string,
-                          country_config: Newtonsoft.Json.Linq.JToken,
+                          country_config: System.Text.Json.JsonElement,
                           period_id: Option<int>,
                           is_billable: bool,
                           vat_period_id: Option<int>,
@@ -1306,11 +1306,11 @@ type BusinessIdentifier =
       ///* `y_tunnus` - Y_TUNNUS
       ///* `vat_code` - VAT_CODE
       ///* `steuernummer` - STEUERNUMMER
-      ``type``: Newtonsoft.Json.Linq.JToken
+      ``type``: System.Text.Json.JsonElement
       ///Identifier value string validated by country-specific rules.
       value: string }
     ///Creates an instance of BusinessIdentifier with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (id: int, ``type``: Newtonsoft.Json.Linq.JToken, value: string): BusinessIdentifier =
+    static member Create (id: int, ``type``: System.Text.Json.JsonElement, value: string): BusinessIdentifier =
         { id = id
           ``type`` = ``type``
           value = value }
@@ -1320,11 +1320,11 @@ type BusinessIdentifierRequest =
       ///* `y_tunnus` - Y_TUNNUS
       ///* `vat_code` - VAT_CODE
       ///* `steuernummer` - STEUERNUMMER
-      ``type``: Newtonsoft.Json.Linq.JToken
+      ``type``: System.Text.Json.JsonElement
       ///Identifier value string validated by country-specific rules.
       value: string }
     ///Creates an instance of BusinessIdentifierRequest with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (``type``: Newtonsoft.Json.Linq.JToken, value: string): BusinessIdentifierRequest =
+    static member Create (``type``: System.Text.Json.JsonElement, value: string): BusinessIdentifierRequest =
         { ``type`` = ``type``; value = value }
 
 type BusinessPermission =
@@ -1378,7 +1378,7 @@ type BusinessRequest =
       ///* `DE_UG` - Saksalainen yrittäjäosakeyhtiö (UG)
       ///* `DEMO` - Demo-yritys
       form: Option<FormEnum>
-      default_vat_period: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_period: Option<System.Text.Json.JsonElement>
       invoicing_default_penalty_interest: Option<float>
       invoicing_default_payment_condition_days: Option<int>
       invoicing_default_email_subject: Option<string>
@@ -1640,11 +1640,11 @@ type CurrentUser =
       saltedge_tos_accepted_at: Option<System.DateTimeOffset>
       last_csat: Option<System.DateTimeOffset>
       invitations: list<Invitation>
-      notifications: Newtonsoft.Json.Linq.JToken
+      notifications: System.Text.Json.JsonElement
       avatar_url: Option<string>
       userships: list<BusinessUsership>
       show_get_started_info: Option<bool>
-      language: Option<Newtonsoft.Json.Linq.JToken>
+      language: Option<System.Text.Json.JsonElement>
       last_active_business_id: Option<string>
       last_active_business_slug: Option<string>
       subscription_tier: string
@@ -1657,7 +1657,7 @@ type CurrentUser =
                           saltedge_tos_accepted_at: Option<System.DateTimeOffset>,
                           last_csat: Option<System.DateTimeOffset>,
                           invitations: list<Invitation>,
-                          notifications: Newtonsoft.Json.Linq.JToken,
+                          notifications: System.Text.Json.JsonElement,
                           avatar_url: Option<string>,
                           userships: list<BusinessUsership>,
                           last_active_business_id: Option<string>,
@@ -1689,7 +1689,7 @@ type CurrentUserRequest =
       first_name: Option<string>
       last_name: Option<string>
       show_get_started_info: Option<bool>
-      language: Option<Newtonsoft.Json.Linq.JToken> }
+      language: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of CurrentUserRequest with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (): CurrentUserRequest =
         { email = None
@@ -1830,13 +1830,13 @@ type DocumentInstance =
       ///* `4` - Poisto
       ///* `6` - YLE-vero
       ///* `7` - Tulovero
-      ``type``: Option<Newtonsoft.Json.Linq.JToken>
+      ``type``: Option<System.Text.Json.JsonElement>
       ///Accounting blueprint used to generate document entries. Whenever this payload changes, entries are recalculated from it. See `bookkeeping_blueprint_retrieve` for full field-level guidance.
-      blueprint: Option<Newtonsoft.Json.Linq.JToken>
+      blueprint: Option<System.Text.Json.JsonElement>
       ///Read-only blueprint classification derived from blueprint content. Possible values: `SALES`, `PURCHASE`, `MANUAL`.
       blueprint_type: string
       ///Import data e.g. CSV or bank transaction data associated with this document.
-      import_data: Option<Newtonsoft.Json.Linq.JToken>
+      import_data: Option<System.Text.Json.JsonElement>
       ///Deprecated: Indicates whether the description of this document was generated by AI.
       has_ai_generated_description: bool
       ///UI rows for entries in this document, used for rendering the entry UI.
@@ -1865,7 +1865,7 @@ type DocumentInstance =
                           period: Option<string>,
                           balance: float32,
                           blueprint_type: string,
-                          import_data: Option<Newtonsoft.Json.Linq.JToken>,
+                          import_data: Option<System.Text.Json.JsonElement>,
                           has_ai_generated_description: bool,
                           entry_ui_rows: list<EntryUIRows>,
                           audit_trail_last_seen_at: Option<System.DateTimeOffset>,
@@ -1923,9 +1923,9 @@ type DocumentInstanceRequest =
       ///* `4` - Poisto
       ///* `6` - YLE-vero
       ///* `7` - Tulovero
-      ``type``: Option<Newtonsoft.Json.Linq.JToken>
+      ``type``: Option<System.Text.Json.JsonElement>
       ///Accounting blueprint used to generate document entries. Whenever this payload changes, entries are recalculated from it. See `bookkeeping_blueprint_retrieve` for full field-level guidance.
-      blueprint: Option<Newtonsoft.Json.Linq.JToken>
+      blueprint: Option<System.Text.Json.JsonElement>
       ///List of tag IDs associated with this document.
       tag_ids: Option<list<int>> }
     ///Creates an instance of DocumentInstanceRequest with all optional fields initialized to None. The required fields are parameters of this function
@@ -1974,13 +1974,13 @@ type DocumentList =
       ///* `4` - Poisto
       ///* `6` - YLE-vero
       ///* `7` - Tulovero
-      ``type``: Option<Newtonsoft.Json.Linq.JToken>
+      ``type``: Option<System.Text.Json.JsonElement>
       ///Accounting blueprint used to generate document entries. Whenever this payload changes, entries are recalculated from it. See `bookkeeping_blueprint_retrieve` for full field-level guidance.
-      blueprint: Option<Newtonsoft.Json.Linq.JToken>
+      blueprint: Option<System.Text.Json.JsonElement>
       ///Read-only blueprint classification derived from blueprint content. Possible values: `SALES`, `PURCHASE`, `MANUAL`.
       blueprint_type: string
       ///Import data e.g. CSV or bank transaction data associated with this document.
-      import_data: Option<Newtonsoft.Json.Linq.JToken>
+      import_data: Option<System.Text.Json.JsonElement>
       ///Deprecated: Indicates whether the description of this document was generated by AI.
       has_ai_generated_description: bool
       ///UI rows for entries in this document, used for rendering the entry UI.
@@ -2008,7 +2008,7 @@ type DocumentList =
                           period: Option<string>,
                           balance: float32,
                           blueprint_type: string,
-                          import_data: Option<Newtonsoft.Json.Linq.JToken>,
+                          import_data: Option<System.Text.Json.JsonElement>,
                           has_ai_generated_description: bool,
                           entry_ui_rows: list<EntryUIRows>,
                           audit_trail_last_seen_at: Option<System.DateTimeOffset>,
@@ -2064,9 +2064,9 @@ type DocumentListRequest =
       ///* `4` - Poisto
       ///* `6` - YLE-vero
       ///* `7` - Tulovero
-      ``type``: Option<Newtonsoft.Json.Linq.JToken>
+      ``type``: Option<System.Text.Json.JsonElement>
       ///Accounting blueprint used to generate document entries. Whenever this payload changes, entries are recalculated from it. See `bookkeeping_blueprint_retrieve` for full field-level guidance.
-      blueprint: Option<Newtonsoft.Json.Linq.JToken>
+      blueprint: Option<System.Text.Json.JsonElement>
       ///List of tag IDs associated with this document.
       tag_ids: Option<list<int>> }
     ///Creates an instance of DocumentListRequest with all optional fields initialized to None. The required fields are parameters of this function
@@ -2094,16 +2094,16 @@ type DocumentRelation =
       ///Semantic role of the current document within this relation.
       ///* `ACCRUAL` - ACCRUAL
       ///* `SETTLEMENT` - SETTLEMENT
-      role: Option<Newtonsoft.Json.Linq.JToken>
+      role: Option<System.Text.Json.JsonElement>
       ///Type of relation that links the documents.
       ///* `ACCRUAL_PAIR` - ACCRUAL_PAIR
-      ``type``: Newtonsoft.Json.Linq.JToken }
+      ``type``: System.Text.Json.JsonElement }
     ///Creates an instance of DocumentRelation with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (id: int,
                           created_at: System.DateTimeOffset,
                           updated_at: System.DateTimeOffset,
                           description: string,
-                          ``type``: Newtonsoft.Json.Linq.JToken): DocumentRelation =
+                          ``type``: System.Text.Json.JsonElement): DocumentRelation =
         { id = id
           created_at = created_at
           updated_at = updated_at
@@ -2118,12 +2118,12 @@ type DocumentRelationRequest =
       ///Semantic role of the current document within this relation.
       ///* `ACCRUAL` - ACCRUAL
       ///* `SETTLEMENT` - SETTLEMENT
-      role: Option<Newtonsoft.Json.Linq.JToken>
+      role: Option<System.Text.Json.JsonElement>
       ///Type of relation that links the documents.
       ///* `ACCRUAL_PAIR` - ACCRUAL_PAIR
-      ``type``: Newtonsoft.Json.Linq.JToken }
+      ``type``: System.Text.Json.JsonElement }
     ///Creates an instance of DocumentRelationRequest with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (``type``: Newtonsoft.Json.Linq.JToken): DocumentRelationRequest =
+    static member Create (``type``: System.Text.Json.JsonElement): DocumentRelationRequest =
         { related_document = None
           role = None
           ``type`` = ``type`` }
@@ -2190,7 +2190,7 @@ type Entry =
       ///* `11` - Rakennuspalveluiden osto
       ///* `12` - Palvelumyynnit EU:n ulkopuolelle
       ///* `13` - Tavaroiden myynti EU:n ulkopuolelle
-      vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      vat_code: Option<System.Text.Json.JsonElement>
       ///The VAT rate of this entry.
       vat_rate: Option<string> }
     ///Creates an instance of Entry with all optional fields initialized to None. The required fields are parameters of this function
@@ -2355,7 +2355,7 @@ type Invitation =
       ///* `bookkeeping` - Kirjanpito
       ///* `invoicing` - Laskutus
       ///* `custom` - Omavalinta
-      permission_group: Option<Newtonsoft.Json.Linq.JToken> }
+      permission_group: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of Invitation with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (id: int, created_at: System.DateTimeOffset, updated_at: System.DateTimeOffset, email: string): Invitation =
         { id = id
@@ -2382,7 +2382,7 @@ type InvitationRequest =
       ///* `bookkeeping` - Kirjanpito
       ///* `invoicing` - Laskutus
       ///* `custom` - Omavalinta
-      permission_group: Option<Newtonsoft.Json.Linq.JToken> }
+      permission_group: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of InvitationRequest with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (email: string): InvitationRequest =
         { email = email
@@ -2398,7 +2398,7 @@ type Invoice =
       updated_at: System.DateTimeOffset
       friendly_name: string
       receiver: int
-      receiver_info: Newtonsoft.Json.Linq.JToken
+      receiver_info: System.Text.Json.JsonElement
       contact_person: Option<string>
       invoice_number: Option<int>
       invoicing_date: string
@@ -2411,14 +2411,14 @@ type Invoice =
       description: Option<string>
       is_credit_note_for: Option<int>
       credit_notes: list<int>
-      pdf: Newtonsoft.Json.Linq.JToken
+      pdf: System.Text.Json.JsonElement
       rows: Option<list<InvoiceRow>>
       ///Invoice status enum. Values: DRAFT, ACCEPTED, PAID, CREDIT_LOSS.
       ///* `DRAFT` - Luonnos
       ///* `ACCEPTED` - Hyväksytty
       ///* `PAID` - Maksettu
       ///* `CREDIT_LOSS` - Luottotappio
-      status: Option<Newtonsoft.Json.Linq.JToken>
+      status: Option<System.Text.Json.JsonElement>
       total_vat_amount: float32
       total_amount: float32
       is_editable: bool
@@ -2430,16 +2430,16 @@ type Invoice =
       ///used in UI to show icon for recurring invoices.
       is_recurrence_applied: bool
       is_past_due: bool
-      delivery_method: Option<Newtonsoft.Json.Linq.JToken>
+      delivery_method: Option<System.Text.Json.JsonElement>
       is_sendable: bool
       last_delivery_at: Option<System.DateTimeOffset>
-      recurrence_rule: Option<Newtonsoft.Json.Linq.JToken>
+      recurrence_rule: Option<System.Text.Json.JsonElement>
       ///Invoice that this invoice is based on
       recurrence_parent_id: Option<int>
       ///Method for calculating the reference
       ///* `KEEP` - Keep
       ///* `ROLL` - Roll
-      recurrence_reference_method: Option<Newtonsoft.Json.Linq.JToken>
+      recurrence_reference_method: Option<System.Text.Json.JsonElement>
       recurrence_email_subject: Option<string>
       recurrence_email_content: Option<string>
       recurrence_end: Option<string>
@@ -2452,11 +2452,11 @@ type Invoice =
       seller_reference: Option<string>
       ///Viiteenne
       buyer_reference: Option<string>
-      bank_transaction: Option<Newtonsoft.Json.Linq.JToken>
+      bank_transaction: Option<System.Text.Json.JsonElement>
       payment_date: Option<string>
-      document: Option<Newtonsoft.Json.Linq.JToken>
+      document: Option<System.Text.Json.JsonElement>
       is_automatic_debt_collection_enabled: Option<bool>
-      automatic_debt_collection_status: Newtonsoft.Json.Linq.JToken
+      automatic_debt_collection_status: System.Text.Json.JsonElement
       external_status_messages: list<InvoiceExternalStatusMessage> }
     ///Creates an instance of Invoice with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (id: int,
@@ -2464,7 +2464,7 @@ type Invoice =
                           updated_at: System.DateTimeOffset,
                           friendly_name: string,
                           receiver: int,
-                          receiver_info: Newtonsoft.Json.Linq.JToken,
+                          receiver_info: System.Text.Json.JsonElement,
                           invoice_number: Option<int>,
                           invoicing_date: string,
                           payment_condition_days: int,
@@ -2472,7 +2472,7 @@ type Invoice =
                           currency: string,
                           vat_country: string,
                           credit_notes: list<int>,
-                          pdf: Newtonsoft.Json.Linq.JToken,
+                          pdf: System.Text.Json.JsonElement,
                           total_vat_amount: float32,
                           total_amount: float32,
                           is_editable: bool,
@@ -2485,10 +2485,10 @@ type Invoice =
                           next_recurrences: list<string>,
                           is_registered_to_kravia: bool,
                           earliest_debt_collection_date: string,
-                          bank_transaction: Option<Newtonsoft.Json.Linq.JToken>,
+                          bank_transaction: Option<System.Text.Json.JsonElement>,
                           payment_date: Option<string>,
-                          document: Option<Newtonsoft.Json.Linq.JToken>,
-                          automatic_debt_collection_status: Newtonsoft.Json.Linq.JToken,
+                          document: Option<System.Text.Json.JsonElement>,
+                          automatic_debt_collection_status: System.Text.Json.JsonElement,
                           external_status_messages: list<InvoiceExternalStatusMessage>): Invoice =
         { id = id
           created_at = created_at
@@ -2568,15 +2568,15 @@ type InvoiceRequest =
       ///* `ACCEPTED` - Hyväksytty
       ///* `PAID` - Maksettu
       ///* `CREDIT_LOSS` - Luottotappio
-      status: Option<Newtonsoft.Json.Linq.JToken>
+      status: Option<System.Text.Json.JsonElement>
       is_active_recurrence_template: Option<bool>
-      delivery_method: Option<Newtonsoft.Json.Linq.JToken>
+      delivery_method: Option<System.Text.Json.JsonElement>
       last_delivery_at: Option<System.DateTimeOffset>
-      recurrence_rule: Option<Newtonsoft.Json.Linq.JToken>
+      recurrence_rule: Option<System.Text.Json.JsonElement>
       ///Method for calculating the reference
       ///* `KEEP` - Keep
       ///* `ROLL` - Roll
-      recurrence_reference_method: Option<Newtonsoft.Json.Linq.JToken>
+      recurrence_reference_method: Option<System.Text.Json.JsonElement>
       recurrence_email_subject: Option<string>
       recurrence_email_content: Option<string>
       recurrence_end: Option<string>
@@ -3214,7 +3214,7 @@ type PatchedAccountRequest =
       ///* `EXP_TAX` - Verotili
       ///* `EXP_TAX_PRE` - Ennakkoverot
       ``type``: Option<Type92dEnum>
-      default_vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_code: Option<System.Text.Json.JsonElement>
       ///* `standard` - STANDARD
       ///* `reduced_a` - REDUCED_A
       ///* `reduced_b` - REDUCED_B
@@ -3252,7 +3252,7 @@ type PatchedBusinessIdentifierRequest =
       ///* `y_tunnus` - Y_TUNNUS
       ///* `vat_code` - VAT_CODE
       ///* `steuernummer` - STEUERNUMMER
-      ``type``: Option<Newtonsoft.Json.Linq.JToken>
+      ``type``: Option<System.Text.Json.JsonElement>
       ///Identifier value string validated by country-specific rules.
       value: Option<string> }
     ///Creates an instance of PatchedBusinessIdentifierRequest with all optional fields initialized to None. The required fields are parameters of this function
@@ -3281,7 +3281,7 @@ type PatchedBusinessRequest =
       ///* `DE_UG` - Saksalainen yrittäjäosakeyhtiö (UG)
       ///* `DEMO` - Demo-yritys
       form: Option<FormEnum>
-      default_vat_period: Option<Newtonsoft.Json.Linq.JToken>
+      default_vat_period: Option<System.Text.Json.JsonElement>
       invoicing_default_penalty_interest: Option<float>
       invoicing_default_payment_condition_days: Option<int>
       invoicing_default_email_subject: Option<string>
@@ -3425,7 +3425,7 @@ type PatchedCurrentUserRequest =
       first_name: Option<string>
       last_name: Option<string>
       show_get_started_info: Option<bool>
-      language: Option<Newtonsoft.Json.Linq.JToken> }
+      language: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of PatchedCurrentUserRequest with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (): PatchedCurrentUserRequest =
         { email = None
@@ -3453,9 +3453,9 @@ type PatchedDocumentInstanceRequest =
       ///* `4` - Poisto
       ///* `6` - YLE-vero
       ///* `7` - Tulovero
-      ``type``: Option<Newtonsoft.Json.Linq.JToken>
+      ``type``: Option<System.Text.Json.JsonElement>
       ///Accounting blueprint used to generate document entries. Whenever this payload changes, entries are recalculated from it. See `bookkeeping_blueprint_retrieve` for full field-level guidance.
-      blueprint: Option<Newtonsoft.Json.Linq.JToken>
+      blueprint: Option<System.Text.Json.JsonElement>
       ///List of tag IDs associated with this document.
       tag_ids: Option<list<int>> }
     ///Creates an instance of PatchedDocumentInstanceRequest with all optional fields initialized to None. The required fields are parameters of this function
@@ -3476,10 +3476,10 @@ type PatchedDocumentRelationRequest =
       ///Semantic role of the current document within this relation.
       ///* `ACCRUAL` - ACCRUAL
       ///* `SETTLEMENT` - SETTLEMENT
-      role: Option<Newtonsoft.Json.Linq.JToken>
+      role: Option<System.Text.Json.JsonElement>
       ///Type of relation that links the documents.
       ///* `ACCRUAL_PAIR` - ACCRUAL_PAIR
-      ``type``: Option<Newtonsoft.Json.Linq.JToken> }
+      ``type``: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of PatchedDocumentRelationRequest with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (): PatchedDocumentRelationRequest =
         { related_document = None
@@ -3501,15 +3501,15 @@ type PatchedInvoiceRequest =
       ///* `ACCEPTED` - Hyväksytty
       ///* `PAID` - Maksettu
       ///* `CREDIT_LOSS` - Luottotappio
-      status: Option<Newtonsoft.Json.Linq.JToken>
+      status: Option<System.Text.Json.JsonElement>
       is_active_recurrence_template: Option<bool>
-      delivery_method: Option<Newtonsoft.Json.Linq.JToken>
+      delivery_method: Option<System.Text.Json.JsonElement>
       last_delivery_at: Option<System.DateTimeOffset>
-      recurrence_rule: Option<Newtonsoft.Json.Linq.JToken>
+      recurrence_rule: Option<System.Text.Json.JsonElement>
       ///Method for calculating the reference
       ///* `KEEP` - Keep
       ///* `ROLL` - Roll
-      recurrence_reference_method: Option<Newtonsoft.Json.Linq.JToken>
+      recurrence_reference_method: Option<System.Text.Json.JsonElement>
       recurrence_email_subject: Option<string>
       recurrence_email_content: Option<string>
       recurrence_end: Option<string>
@@ -3560,7 +3560,7 @@ type PatchedProductRequest =
       unit: Option<string>
       amount: Option<float32>
       vat_rate: Option<float>
-      vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      vat_code: Option<System.Text.Json.JsonElement>
       is_vat_inclusive: Option<bool>
       account_id: Option<int>
       description: Option<string> }
@@ -3588,7 +3588,7 @@ type PatchedPurchaseInvoiceRequest =
       receiver_name: Option<string>
       reference: Option<string>
       message: Option<string>
-      original_attachment: Option<Newtonsoft.Json.Linq.JToken>
+      original_attachment: Option<System.Text.Json.JsonElement>
       amount: Option<float32>
       currency: Option<string>
       is_paid: Option<bool>
@@ -3597,7 +3597,7 @@ type PatchedPurchaseInvoiceRequest =
       ///* `EMAIL` - Email
       ///* `UPLOAD` - Lataus
       ///* `VAT_PURCHASE_INVOICE` - ALV-ostolasku
-      import_source: Option<Newtonsoft.Json.Linq.JToken> }
+      import_source: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of PatchedPurchaseInvoiceRequest with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (): PatchedPurchaseInvoiceRequest =
         { invoice_number = None
@@ -3698,9 +3698,9 @@ type PaymentInstruction =
           statuses = statuses }
 
 type PaymentInstructionRequest =
-    { payment_details: Newtonsoft.Json.Linq.JToken }
+    { payment_details: System.Text.Json.JsonElement }
     ///Creates an instance of PaymentInstructionRequest with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (payment_details: Newtonsoft.Json.Linq.JToken): PaymentInstructionRequest =
+    static member Create (payment_details: System.Text.Json.JsonElement): PaymentInstructionRequest =
         { payment_details = payment_details }
 
 type PaymentInstructionStatus =
@@ -3852,7 +3852,7 @@ type Product =
       vat_inclusive_amount: float32
       vat_amount: float32
       vat_rate: Option<float>
-      vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      vat_code: Option<System.Text.Json.JsonElement>
       is_vat_inclusive: Option<bool>
       account_id: Option<int>
       description: Option<string> }
@@ -3888,7 +3888,7 @@ type ProductRequest =
       unit: string
       amount: float32
       vat_rate: Option<float>
-      vat_code: Option<Newtonsoft.Json.Linq.JToken>
+      vat_code: Option<System.Text.Json.JsonElement>
       is_vat_inclusive: Option<bool>
       account_id: Option<int>
       description: Option<string> }
@@ -3922,7 +3922,7 @@ type PurchaseInvoice =
       reference: Option<string>
       message: Option<string>
       original_invoice_xml: Option<string>
-      original_attachment: Option<Newtonsoft.Json.Linq.JToken>
+      original_attachment: Option<System.Text.Json.JsonElement>
       amount: float32
       currency: Option<string>
       virtuaaliviivakoodi: Option<string>
@@ -3934,13 +3934,13 @@ type PurchaseInvoice =
       ///* `EMAIL` - Email
       ///* `UPLOAD` - Lataus
       ///* `VAT_PURCHASE_INVOICE` - ALV-ostolasku
-      import_source: Newtonsoft.Json.Linq.JToken
-      payment: Option<Newtonsoft.Json.Linq.JToken>
-      pis_payment: Option<Newtonsoft.Json.Linq.JObject>
+      import_source: System.Text.Json.JsonElement
+      payment: Option<System.Text.Json.JsonElement>
+      pis_payment: Option<System.Text.Json.JsonElement>
       ///The date when the invoice was set to paid.
       payment_date: Option<string>
-      bank_transaction: Option<Newtonsoft.Json.Linq.JToken>
-      document: Option<Newtonsoft.Json.Linq.JToken> }
+      bank_transaction: Option<System.Text.Json.JsonElement>
+      document: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of PurchaseInvoice with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (id: int,
                           created_at: System.DateTimeOffset,
@@ -3951,12 +3951,12 @@ type PurchaseInvoice =
                           virtuaaliviivakoodi: Option<string>,
                           is_past_due: string,
                           attachments: list<int>,
-                          import_source: Newtonsoft.Json.Linq.JToken,
-                          payment: Option<Newtonsoft.Json.Linq.JToken>,
-                          pis_payment: Option<Newtonsoft.Json.Linq.JObject>,
+                          import_source: System.Text.Json.JsonElement,
+                          payment: Option<System.Text.Json.JsonElement>,
+                          pis_payment: Option<System.Text.Json.JsonElement>,
                           payment_date: Option<string>,
-                          bank_transaction: Option<Newtonsoft.Json.Linq.JToken>,
-                          document: Option<Newtonsoft.Json.Linq.JToken>): PurchaseInvoice =
+                          bank_transaction: Option<System.Text.Json.JsonElement>,
+                          document: Option<System.Text.Json.JsonElement>): PurchaseInvoice =
         { id = id
           created_at = created_at
           updated_at = updated_at
@@ -3998,7 +3998,7 @@ type PurchaseInvoiceRequest =
       receiver_name: Option<string>
       reference: Option<string>
       message: Option<string>
-      original_attachment: Option<Newtonsoft.Json.Linq.JToken>
+      original_attachment: Option<System.Text.Json.JsonElement>
       amount: float32
       currency: Option<string>
       is_paid: Option<bool>
@@ -4007,9 +4007,9 @@ type PurchaseInvoiceRequest =
       ///* `EMAIL` - Email
       ///* `UPLOAD` - Lataus
       ///* `VAT_PURCHASE_INVOICE` - ALV-ostolasku
-      import_source: Newtonsoft.Json.Linq.JToken }
+      import_source: System.Text.Json.JsonElement }
     ///Creates an instance of PurchaseInvoiceRequest with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (invoicing_date: string, amount: float32, import_source: Newtonsoft.Json.Linq.JToken): PurchaseInvoiceRequest =
+    static member Create (invoicing_date: string, amount: float32, import_source: System.Text.Json.JsonElement): PurchaseInvoiceRequest =
         { invoice_number = None
           invoicing_date = invoicing_date
           due_date = None
@@ -4075,7 +4075,7 @@ type SendInvoiceRequest =
       ///* `ELASKU` - Elasku
       ///* `PAPER` - Paper
       delivery_method: DeliveryMethodEnum
-      data: Option<Newtonsoft.Json.Linq.JToken> }
+      data: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of SendInvoiceRequest with all optional fields initialized to None. The required fields are parameters of this function
     static member Create (delivery_method: DeliveryMethodEnum): SendInvoiceRequest =
         { delivery_method = delivery_method
