@@ -9,10 +9,9 @@ open CsvHelper
 open CsvHelper.Configuration
 open FSharp.Control
 open Microsoft.FSharp.Reflection
-open Newtonsoft.Json
-open Newtonsoft.Json.Linq
+open System.Text.Json
 open Nocfo.CsvHelpers
-open NocfoApi.Http
+open Nocfo.JsonHelpers
 
 module private CsvFieldMapping =
   let normalizeFields (fields: string list) : string list =
@@ -333,26 +332,12 @@ module Csv =
     else
       false
 
-  let private deserializeJsonValue (rawText: string) (t: Type) =
-    JsonConvert.DeserializeObject(rawText, t, Serializer.settings)
-
-  let private parseJTokenValue (rawText: string) : obj =
-    let s = rawText.Trim()
-    try
-      if s.StartsWith("{") || s.StartsWith("[") then
-        (JToken.Parse(s) :> obj)
-      else
-        (JValue(s) :> JToken :> obj)
-    with _ ->
-      (JValue(rawText) :> JToken :> obj)
-
   let private parseScalarValue (csv: CsvReader) (colIndex: int) (t: Type) : obj =
     let rawText = csv.GetField(colIndex)
-    if t = typeof<JToken> then
-      parseJTokenValue rawText
+    if t = typeof<JsonElement> then
+      parseCsvJsonElement rawText :> obj
     elif isFSharpStringEnumType t then
-      let jsonText = JsonConvert.SerializeObject(rawText, Serializer.settings)
-      deserializeJsonValue jsonText t
+      deserializeUntyped (JsonSerializer.Serialize(rawText)) t
     else
       csv.GetField(t, colIndex)
 
@@ -384,7 +369,7 @@ module Csv =
           else
             parts :> obj
         elif isCollectionType ft then
-          deserializeJsonValue rawText ft
+          deserializeUntyped rawText ft
         else
           failwithf "CSV collection field '%s' has unsupported type '%s'." fieldName ft.FullName
 
