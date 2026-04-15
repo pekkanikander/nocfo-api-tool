@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../hawaii-client/hawaii-client.fsproj" />
+    <ProjectReference Include="../tools/tools.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="PatchShapeTests.fs" />
@@ -22,5 +23,6 @@
     <Compile Include="DomainDiffTests.fs" />
     <Compile Include="EntityOpsTests.fs" />
     <Compile Include="CsvTests.fs" />
+    <Compile Include="BlueprintJsonTests.fs" />
   </ItemGroup>
 </Project>

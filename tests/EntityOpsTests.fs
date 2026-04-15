@@ -9,6 +9,7 @@ open Xunit
 open Swensen.Unquote
 open FSharp.Control
 open Nocfo.Domain
+open Nocfo.JsonHelpers
 open NocfoApi.Types
 open NocfoApi.Http
 open NocfoClient
@@ -34,7 +35,7 @@ let private businessContext dryRun handler =
               cachingPolicy = None
               dryRun = dryRun } }
       key =
-        { id = BusinessIdentifier.Create(0, Newtonsoft.Json.Linq.JToken.FromObject("y_tunnus"), "1234567-8")
+        { id = BusinessIdentifier.Create(0, jsonString "y_tunnus", "1234567-8")
           slug = "acme" } }
 
 let private jsonResponse statusCode body =

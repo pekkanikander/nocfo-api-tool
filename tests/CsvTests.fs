@@ -1,15 +1,23 @@
 module CsvTests
 
 open System.IO
+open System.Text.Json
 open Xunit
 open Swensen.Unquote
 open FSharp.Control
 open Nocfo
+open Nocfo.JsonHelpers
 
-// ── Test record ───────────────────────────────────────────────────────────────
+// ── Test records ──────────────────────────────────────────────────────────────
 
 [<CLIMutable>]
 type Row = { id: int; name: string; note: string option }
+
+[<CLIMutable>]
+type JsonRow = { id: int; payload: JsonElement }
+
+[<CLIMutable>]
+type JsonOptionRow = { id: int; payload: JsonElement option }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,3 +104,83 @@ let ``Written CSV header contains expected column names`` () =
     test <@ header.Contains "id" @>
     test <@ header.Contains "name" @>
     test <@ header.Contains "note" @>
+
+// ── Raw JSON (JsonElement) round-trips ────────────────────────────────────────
+
+let private writeJsonRowsToCsv (rows: JsonRow list) : string =
+    use writer = new StringWriter()
+    Csv.writeCsvGeneric<JsonRow> writer None (AsyncSeq.ofSeq rows)
+    |> AsyncSeq.toListSynchronously
+    |> ignore
+    writer.ToString()
+
+let private readJsonRowsFromCsv (csv: string) : JsonRow list =
+    use reader = new StringReader(csv)
+    Csv.readCsvGeneric<JsonRow> reader None
+    |> AsyncSeq.toListSynchronously
+
+let private writeJsonOptRowsToCsv (rows: JsonOptionRow list) : string =
+    use writer = new StringWriter()
+    Csv.writeCsvGeneric<JsonOptionRow> writer None (AsyncSeq.ofSeq rows)
+    |> AsyncSeq.toListSynchronously
+    |> ignore
+    writer.ToString()
+
+let private readJsonOptRowsFromCsv (csv: string) : JsonOptionRow list =
+    use reader = new StringReader(csv)
+    Csv.readCsvGeneric<JsonOptionRow> reader None
+    |> AsyncSeq.toListSynchronously
+
+[<Fact>]
+let ``JsonElement object cell survives round-trip`` () =
+    let obj = parseCsvJsonElement """{"x":1,"y":2}"""
+    let rows : JsonRow list = [ { id = 1; payload = obj } ]
+    let result = readJsonRowsFromCsv (writeJsonRowsToCsv rows)
+    test <@ result.Length = 1 @>
+    let text = elementToCompactString result.[0].payload
+    test <@ text = """{"x":1,"y":2}""" @>
+
+[<Fact>]
+let ``JsonElement array cell survives round-trip`` () =
+    let arr = parseCsvJsonElement """[1,2,3]"""
+    let rows : JsonRow list = [ { id = 1; payload = arr } ]
+    let result = readJsonRowsFromCsv (writeJsonRowsToCsv rows)
+    test <@ result.Length = 1 @>
+    let text = elementToCompactString result.[0].payload
+    test <@ text = """[1,2,3]""" @>
+
+[<Fact>]
+let ``JsonElement option Some object survives round-trip`` () =
+    let obj = parseCsvJsonElement """{"a":"b"}"""
+    let rows : JsonOptionRow list = [ { id = 1; payload = Some obj } ]
+    let result = readJsonOptRowsFromCsv (writeJsonOptRowsToCsv rows)
+    test <@ result.Length = 1 @>
+    let text = result.[0].payload |> Option.map elementToCompactString
+    test <@ text = Some """{"a":"b"}""" @>
+
+[<Fact>]
+let ``JsonElement option None survives round-trip`` () =
+    let rows : JsonOptionRow list = [ { id = 1; payload = None } ]
+    let result = readJsonOptRowsFromCsv (writeJsonOptRowsToCsv rows)
+    test <@ result.Length = 1 @>
+    test <@ result.[0].payload = None @>
+
+[<Fact>]
+let ``parseCsvJsonElement: non-JSON cell becomes a JSON string element`` () =
+    let e = parseCsvJsonElement "hello"
+    let kind = e.ValueKind
+    let str  = e.GetString()
+    test <@ kind = JsonValueKind.String @>
+    test <@ str  = "hello" @>
+
+[<Fact>]
+let ``parseCsvJsonElement: object literal parses as JSON object`` () =
+    let e = parseCsvJsonElement """{"k":1}"""
+    let kind = e.ValueKind
+    test <@ kind = JsonValueKind.Object @>
+
+[<Fact>]
+let ``parseCsvJsonElement: array literal parses as JSON array`` () =
+    let e = parseCsvJsonElement """[true]"""
+    let kind = e.ValueKind
+    test <@ kind = JsonValueKind.Array @>
