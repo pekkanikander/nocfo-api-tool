@@ -151,7 +151,7 @@ type private DeletePayload =
 let updateBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs>) (fields: string list) =
     async {
         let csvStream =
-            Nocfo.Csv.readDeltasByStrKey "slug" (fun s p -> BusinessDeltaRow.Create(s, p)) toolContext.Input (Some fields)
+            Nocfo.Csv.readDeltas<BusinessDeltaRow, string, NocfoApi.Types.PatchedBusinessRequest> "slug" toolContext.Input (Some fields)
             |> AsyncSeq.map Ok
         return!
             csvStream
@@ -167,7 +167,7 @@ let updateAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
         | Ok ctx ->
             // The desired state of accounts from the CSV file.
             let csvStream =
-                Nocfo.Csv.readDeltas<AccountDelta, NocfoApi.Types.PatchedAccountRequest> input (Some fields)
+                Nocfo.Csv.readDeltas<AccountDelta, int, NocfoApi.Types.PatchedAccountRequest> "id" input (Some fields)
                 |> AsyncSeq.map Ok
             return!
                 Account.executeDeltaUpdates ctx csvStream
@@ -185,7 +185,7 @@ let updateContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
         | Ok ctx ->
             // The desired state of contacts from the CSV file.
             let csvStream =
-                Nocfo.Csv.readDeltas<ContactDelta, NocfoApi.Types.PatchedContactRequest> input (Some fields)
+                Nocfo.Csv.readDeltas<ContactDelta, int, NocfoApi.Types.PatchedContactRequest> "id" input (Some fields)
                 |> AsyncSeq.map Ok
             return!
                 Contact.executeDeltaUpdates ctx csvStream

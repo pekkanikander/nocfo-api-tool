@@ -109,11 +109,13 @@ module private CsvHeaderValidation =
             typeof<'T>.FullName
             (String.Join(", ", missing))
 
-  let validateDeltaHeader<'TPatch> (header: string[]) (fields: string list option) : unit =
+  let validateDeltaHeader<'TPatch> (keyColumn: string) (header: string[]) (fields: string list option) : unit =
     let headerNames =
       header
       |> Array.map (fun s -> s.Trim().ToLowerInvariant())
       |> Set.ofArray
+
+    let normalizedKeyColumn = keyColumn.Trim().ToLowerInvariant()
 
     let patchPropNames =
       typeof<'TPatch>.GetProperties(BindingFlags.Instance ||| BindingFlags.Public)
@@ -128,7 +130,7 @@ module private CsvHeaderValidation =
 
     let unknownRequested =
       requested
-      |> List.filter (fun name -> name <> "id" && not (patchPropNames.Contains name))
+      |> List.filter (fun name -> name <> normalizedKeyColumn && not (patchPropNames.Contains name))
       |> List.distinct
 
     if not unknownRequested.IsEmpty then
@@ -138,12 +140,12 @@ module private CsvHeaderValidation =
 
     match requested with
     | [] ->
-        if not (headerNames.Contains "id") then
-          failwithf "CSV is missing required column(s) for %s: id" typeof<'TPatch>.FullName
+        if not (headerNames.Contains normalizedKeyColumn) then
+          failwithf "CSV is missing required column(s) for %s: %s" typeof<'TPatch>.FullName normalizedKeyColumn
 
         let unknown =
           headerNames
-          |> Set.filter (fun name -> name <> "id" && not (patchPropNames.Contains name))
+          |> Set.filter (fun name -> name <> normalizedKeyColumn && not (patchPropNames.Contains name))
           |> Set.toList
 
         if not unknown.IsEmpty then
@@ -153,7 +155,7 @@ module private CsvHeaderValidation =
 
     | wanted ->
         let required =
-          if wanted |> List.contains "id" then wanted else "id" :: wanted
+          if wanted |> List.contains normalizedKeyColumn then wanted else normalizedKeyColumn :: wanted
 
         let missing =
           required
@@ -474,8 +476,9 @@ module Csv =
         dispose ()
     }
 
-  let readDeltasCore<'TPatch, 'TDelta>
-      (mkDelta: int -> 'TPatch -> 'TDelta)
+  let readDeltasCore<'TKey, 'TPatch, 'TDelta>
+      (keyColumn: string)
+      (mkDelta: 'TKey -> 'TPatch -> 'TDelta)
       (tr: TextReader)
       (fields: string list option)
     : AsyncSeq<'TDelta> =
@@ -496,70 +499,17 @@ module Csv =
         if csv.Read() then
           csv.ReadHeader() |> ignore
 
-          validateDeltaHeader<'TPatch> csv.HeaderRecord fields
+          validateDeltaHeader<'TPatch> keyColumn csv.HeaderRecord fields
 
-          let idColumn =
-            tryFindColumnIndex "id" csv.HeaderRecord
-            |> Option.defaultWith (fun () -> failwithf "CSV is missing required column 'id' for %s." typeof<'TDelta>.FullName)
-
-          let patchFieldInfos, patchFieldColumns, patchDefaults =
-            collectRecordMetadata patchType csv.HeaderRecord fields
-
-          while csv.Read() do
-            let idValue = csv.GetField(typeof<int>, idColumn) :?> int
-            let patchValues = buildRecordFromCsv<'TPatch> csv patchFieldInfos patchFieldColumns patchDefaults
-            let patch = FSharpValue.MakeRecord(patchType, patchValues, true)
-            let delta = mkDelta idValue (patch :?> 'TPatch)
-            yield delta
-      finally
-        dispose ()
-    }
-
-  let inline readDeltas< ^TDelta, ^TPatch
-      when ^TDelta : (static member Create : int * ^TPatch -> ^TDelta) >
-      (tr: TextReader)
-      (fields: string list option)
-    : AsyncSeq< ^TDelta > =
-    readDeltasCore< ^TPatch, ^TDelta >
-      (fun id patch -> (^TDelta : (static member Create : int * ^TPatch -> ^TDelta) (id, patch)))
-      tr
-      fields
-
-  /// Like readDeltas but uses a named string column as the key instead of an integer 'id' column.
-  let readDeltasByStrKey<'TPatch, 'TDelta>
-      (keyColumn : string)
-      (mkDelta   : string -> 'TPatch -> 'TDelta)
-      (tr        : TextReader)
-      (fields    : string list option)
-    : AsyncSeq<'TDelta> =
-    let csv = mkCsvReader tr defaultIOOptions
-
-    registerFSharpConvertersFor csv.Context typeof<'TPatch>
-
-    let mutable disposed = false
-    let dispose () =
-      if not disposed then
-        (csv :> IDisposable).Dispose()
-        disposed <- true
-
-    asyncSeq {
-      try
-        let patchType = typeof<'TPatch>
-
-        if csv.Read() then
-          csv.ReadHeader() |> ignore
-
-          validateDeltaHeader<'TPatch> csv.HeaderRecord fields
-
-          let keyColIdx =
+          let keyColumnIndex =
             tryFindColumnIndex keyColumn csv.HeaderRecord
-            |> Option.defaultWith (fun () -> failwithf "CSV is missing required column '%s' for delta." keyColumn)
+            |> Option.defaultWith (fun () -> failwithf "CSV is missing required column '%s' for %s." keyColumn typeof<'TDelta>.FullName)
 
           let patchFieldInfos, patchFieldColumns, patchDefaults =
             collectRecordMetadata patchType csv.HeaderRecord fields
 
           while csv.Read() do
-            let keyValue = csv.GetField(keyColIdx)
+            let keyValue = csv.GetField(typeof<'TKey>, keyColumnIndex) :?> 'TKey
             let patchValues = buildRecordFromCsv<'TPatch> csv patchFieldInfos patchFieldColumns patchDefaults
             let patch = FSharpValue.MakeRecord(patchType, patchValues, true)
             let delta = mkDelta keyValue (patch :?> 'TPatch)
@@ -567,3 +517,15 @@ module Csv =
       finally
         dispose ()
     }
+
+  let inline readDeltas< ^TDelta, ^TKey, ^TPatch
+      when ^TDelta : (static member Create : ^TKey * ^TPatch -> ^TDelta) >
+      (keyColumn: string)
+      (tr: TextReader)
+      (fields: string list option)
+    : AsyncSeq< ^TDelta > =
+    readDeltasCore< ^TKey, ^TPatch, ^TDelta >
+      keyColumn
+      (fun key patch -> (^TDelta : (static member Create : ^TKey * ^TPatch -> ^TDelta) (key, patch)))
+      tr
+      fields
