@@ -1,10 +1,13 @@
-.PHONY: build test publish publish-osx publish-linux publish-win clean
+.PHONY: build test test-online publish publish-osx publish-linux publish-win clean
 
 build:
 	dotnet build
 
 test:
 	dotnet test tests
+
+test-online:
+	bash tests-online/test-list.sh
 
 publish: publish-osx publish-linux publish-win
 

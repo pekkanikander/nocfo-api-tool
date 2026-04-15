@@ -71,6 +71,7 @@ Requirements:
 ## Command surface
 
 Read-only commands:
+
 - `list businesses`
 - `list accounts`
 - `list contacts`
@@ -78,6 +79,7 @@ Read-only commands:
 - `map accounts`
 
 Mutating commands:
+
 - `update accounts`
 - `update contacts`
 - `delete accounts`
@@ -155,6 +157,22 @@ If `NOCFO_TOOL_CONFIG_HOME` is set, the config file is read from
 
 Specifying an unknown profile or a missing config file is a hard error (`EX_CONFIG`).
 Env vars set alongside `--profile` still take precedence over the profile values.
+
+### Repo-local online test profile
+
+The online regression suite uses a repo-local config root under `tests-online/config`:
+
+1. Copy `tests-online/config/config.toml.example` to `tests-online/config/config.toml`.
+2. Put the real api-tst token in `[profiles.online-test]`.
+3. Copy `tests-online/config/fixture.env.example` to `tests-online/config/fixture.env`
+4. Set `TEST_BUSINESS_SLUG` in `tests-online/config/fixture.env`.
+5. Ensure `bash` and `python3` are available.
+
+Then run:
+
+```bash
+make test-online
+```
 
 ### Environment variables
 

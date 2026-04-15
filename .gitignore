@@ -1,6 +1,8 @@
 node_modules
 .env*
 .DS_Store
+tests-online/config/config.toml
+tests-online/config/fixture.env
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

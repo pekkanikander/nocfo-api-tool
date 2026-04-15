@@ -12,6 +12,7 @@ An F# CLI tool and client library for the [NoCFO](https://nocfo.io/) Finnish acc
 - `api/openapi.json` – The upstream NoCFO OpenAPI document used for generation.
 - `tools/` – CSV-first CLI ("nocfo") built on top of the Hawaii F# client library; see `tools/README.md`.
 - `tests/` – xUnit unit tests for the pure library modules (no network access needed).
+- `tests-online/` – Shell-based online regression tests for command line commands against `api-tst`.
 - `requests/` – Raw HTTP checks (VS Code REST client format) for manual smoke testing.
 - `vendor/Hawaii/` – Forked generator with small fixes for nullable handling, enum tolerance, and operation name cleanup.
 
@@ -46,8 +47,11 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
 
    ```bash
    dotnet build
-   dotnet test
+   make test
    ```
+
+   The online regression suite is separate and requires local api-tst credentials
+   that need to be first configured, see [`tests-online/README.md`](tests-online/README.md).
 
 3. **List businesses**:
 
@@ -127,6 +131,25 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,
 and the internal architecture.
+
+## Online Regression Suite
+
+The repo includes a separate shell-based online test suite under `tests-online/`.
+It exercises the existing CLI end to end against `https://api-tst.nocfo.io` and is
+not part of the default `dotnet test` flow.
+
+Setup:
+
+1. Copy `tests-online/config/config.toml.example` to `tests-online/config/config.toml`.
+2. Set a real api-tst token in the `online-test` profile.
+3. Set `TEST_BUSINESS_SLUG` in `tests-online/config/fixture.env`.
+4. Ensure `bash` and `python3` are available in your shell environment.
+
+Run it explicitly with:
+
+```bash
+make test-online
+```
 
 ## Releases
 
