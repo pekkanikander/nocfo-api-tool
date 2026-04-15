@@ -2,8 +2,10 @@ namespace Nocfo.Domain
 
 open System
 open System.Net
+open System.Text.Json
 open FSharp.Control
 open Nocfo
+open Nocfo.JsonHelpers
 open NocfoApi.Types
 open NocfoClient
 open NocfoClient.Http
@@ -131,8 +133,8 @@ type DocumentCreatePayload =
   { date: string option
     description: string option
     is_draft: bool option
-    ``type``: Newtonsoft.Json.Linq.JToken option
-    blueprint: Newtonsoft.Json.Linq.JToken option }
+    ``type``: JsonElement option
+    blueprint: JsonElement option }
 
 type DocumentCommand =
   | CreateDocument of DocumentCreatePayload
@@ -401,7 +403,7 @@ module EntityOps =
     let url id = endpointOf context.key.slug (string id)
     let handlePatch id patch =
       if context.ctx.options.dryRun then async {
-        eprintfn "[dry-run] PATCH %s %s" (url id) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
+        eprintfn "[dry-run] PATCH %s %s" (url id) (serializeUntyped patch)
         return Ok None
       } else
         Http.patchJson<'Patch, 'Full> context.ctx.http (url id) patch
@@ -472,7 +474,7 @@ module Business =
   let executeDeltaUpdates (context: AccountingContext) (deltas: AsyncSeq<Result<BusinessDeltaRow, DomainError>>) : AsyncSeq<Result<BusinessResult, DomainError>> =
     let handlePatch (slug: string) (patch: NocfoApi.Types.PatchedBusinessRequest) =
       if context.options.dryRun then async {
-        eprintfn "[dry-run] PATCH %s %s" (Endpoints.businessBySlug slug) (Newtonsoft.Json.JsonConvert.SerializeObject patch)
+        eprintfn "[dry-run] PATCH %s %s" (Endpoints.businessBySlug slug) (serializeUntyped patch)
         return Ok None
       } else
         Http.patchJson<NocfoApi.Types.PatchedBusinessRequest, NocfoApi.Types.Business>
@@ -716,11 +718,11 @@ module Streams =
       | AccountCommand.CreateAccount payload ->
           sprintf "POST %s %s"
             (Endpoints.accountsBySlug context.key.slug)
-            (Newtonsoft.Json.JsonConvert.SerializeObject payload)
+            (serializeUntyped payload)
       | AccountCommand.UpdateAccount delta ->
           sprintf "PATCH %s %s"
             (Endpoints.accountById context.key.slug (string delta.id))
-            (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
+            (serializeUntyped delta.patch)
       | AccountCommand.DeleteAccount id ->
           sprintf "DELETE %s" (Endpoints.accountById context.key.slug (string id))
 
@@ -756,7 +758,7 @@ module Streams =
       | DocumentCommand.CreateDocument payload ->
           sprintf "POST %s %s"
             (Endpoints.documentsBySlug context.key.slug)
-            (Newtonsoft.Json.JsonConvert.SerializeObject payload)
+            (serializeUntyped payload)
       | DocumentCommand.DeleteDocument id ->
           sprintf "DELETE %s" (Endpoints.documentById context.key.slug (string id))
 
@@ -782,11 +784,11 @@ module Streams =
       | ContactCommand.CreateContact payload ->
           sprintf "POST %s %s"
             (Endpoints.contactsBySlug context.key.slug)
-            (Newtonsoft.Json.JsonConvert.SerializeObject payload)
+            (serializeUntyped payload)
       | ContactCommand.UpdateContact delta ->
           sprintf "PATCH %s %s"
             (Endpoints.contactById context.key.slug (string delta.id))
-            (Newtonsoft.Json.JsonConvert.SerializeObject delta.patch)
+            (serializeUntyped delta.patch)
       | ContactCommand.DeleteContact id ->
           sprintf "DELETE %s" (Endpoints.contactById context.key.slug (string id))
 
@@ -822,7 +824,7 @@ module Streams =
 
     let postBusiness (payload: BusinessCreatePayload) =
       if context.options.dryRun then async {
-        eprintfn "[dry-run] POST /business/ %s" (Newtonsoft.Json.JsonConvert.SerializeObject payload)
+        eprintfn "[dry-run] POST /business/ %s" (serializeUntyped payload)
         return Ok None
       } else
         let req =
@@ -859,21 +861,17 @@ module Streams =
 ///
 
 module BusinessResolver =
-  let private identifierTypeToken (value: string) =
-    Newtonsoft.Json.Linq.JToken.FromObject(value)
-
   /// Build candidate identifiers from a free-form CLI argument.
-  /// We try both 'Y_tunnus' and 'Vat_code' identifiers.
+  /// We try both 'y_tunnus' and 'vat_code' identifier types.
   let private formIdentifierCandidates (input: string) : BusinessIdentifier list =
     let trimmed = input.Trim()
-
-    [ BusinessIdentifier.Create(0, identifierTypeToken "y_tunnus", trimmed)
-      BusinessIdentifier.Create(0, identifierTypeToken "vat_code", trimmed) ]
+    [ BusinessIdentifier.Create(0, jsonString "y_tunnus", trimmed)
+      BusinessIdentifier.Create(0, jsonString "vat_code", trimmed) ]
 
   let private identifiersOverlap (candidates: BusinessIdentifier list) (identifier: BusinessIdentifier) =
     candidates
     |> List.exists (fun candidate ->
-         String.Equals(candidate.``type``.ToString(), identifier.``type``.ToString(), StringComparison.OrdinalIgnoreCase) &&
+         String.Equals(elementAsComparisonKey candidate.``type``, elementAsComparisonKey identifier.``type``, StringComparison.OrdinalIgnoreCase) &&
          String.Equals(candidate.value, identifier.value, StringComparison.OrdinalIgnoreCase))
 
   let private businessMatches candidates (full: BusinessFull) =
