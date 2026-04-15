@@ -76,6 +76,7 @@ type CliArgs =
     | [< AltCommandLine("-i") >]                  In      of inPath: string
     | [< AltCommandLine("-p") >]                  Profile of profileName: string
     | [< AltCommandLine("-n") >]                  DryRun
+    | [< AltCommandLine("-v") >]                  Verbose
     | [< NoPrefix; SubCommand >]                  List    of ParseResults<EntitiesArgs>
     | [< NoPrefix; SubCommand >]                  Update  of ParseResults<EntitiesArgs>
     | [< NoPrefix; SubCommand >]                  Delete  of ParseResults<EntitiesArgs>
@@ -88,6 +89,7 @@ type CliArgs =
             | In _         -> "Optional CSV input path (default stdin)."
             | Profile _    -> "Named configuration profile from ~/.config/nocfo/config.toml."
             | DryRun       -> "Print what would be done without executing any mutations."
+            | Verbose      -> "Log HTTP requests and responses to stderr."
             | List _       -> "List entities (businesses, accounts, etc.)."
             | Update _     -> "Update an entity (business, account, etc.)."
             | Delete _     -> "Delete entities (accounts, etc.)."

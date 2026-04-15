@@ -118,31 +118,31 @@ let private foldCommandResults (printOk: 'Result -> unit) (results: AsyncSeq<Res
             |> AsyncSeq.fold (fun n r ->
                 match r with
                 | Ok v  -> printOk v; n
-                | Error e -> printfn "Command failed: %A" e; n + 1) 0
+                | Error e -> eprintfn "Command failed: %A" e; n + 1) 0
         return if n > 0 then 1 else 0
     }
 
 let foldAccountCommandResults =
     foldCommandResults (function
-        | AccountUpdated account  -> printfn "Updated account %d (%s)" account.id account.number
-        | AccountDeleted id       -> printfn "Deleted account %d" id
-        | AccountCreated account  -> printfn "Created account %d (%s)" account.id account.number)
+        | AccountUpdated account   -> eprintfn "Updated account %d (%s)" account.id account.number
+        | AccountDeleted id        -> eprintfn "Deleted account %d" id
+        | AccountCreated account   -> eprintfn "Created account %d (%s)" account.id account.number)
 
 let foldDocumentCommandResults =
     foldCommandResults (function
-        | DocumentCreated document -> printfn "Created document %d (%s)" document.id (defaultArg document.number "<none>")
-        | DocumentDeleted id       -> printfn "Deleted document %d" id)
+        | DocumentCreated document -> eprintfn "Created document %d (%s)" document.id (defaultArg document.number "<none>")
+        | DocumentDeleted id       -> eprintfn "Deleted document %d" id)
 
 let foldContactCommandResults =
     foldCommandResults (function
-        | ContactUpdated contact -> printfn "Updated contact %d (%s)" contact.id contact.name
-        | ContactDeleted id      -> printfn "Deleted contact %d" id
-        | ContactCreated contact -> printfn "Created contact %d (%s)" contact.id contact.name)
+        | ContactUpdated contact   -> eprintfn "Updated contact %d (%s)" contact.id contact.name
+        | ContactDeleted id        -> eprintfn "Deleted contact %d" id
+        | ContactCreated contact   -> eprintfn "Created contact %d (%s)" contact.id contact.name)
 
 let foldBusinessCommandResults =
     foldCommandResults (function
-        | BusinessUpdated b -> printfn "Updated business %s (%s)" b.key.slug b.meta.name
-        | BusinessCreated b -> printfn "Created business %s (%s)" b.key.slug b.meta.name)
+        | BusinessUpdated b        -> eprintfn "Updated business %s (%s)" b.key.slug b.meta.name
+        | BusinessCreated b        -> eprintfn "Created business %s (%s)" b.key.slug b.meta.name)
 
 [<CLIMutable>]
 type private DeletePayload =
@@ -292,10 +292,10 @@ type private MapAccountsOutcome =
     | Mapped of Mapping.IDMap
     | MissingTarget of AccountFull
 
-let private getSourceAccounting (cfg: ToolConfig) =
+let private getSourceAccounting (cfg: ToolConfig) (verbose: bool) =
     match cfg.SourceToken with
     | Some sourceToken ->
-        let sourceHttp = NocfoClient.Http.createHttpContext cfg.SourceBaseUrl sourceToken
+        let sourceHttp = NocfoClient.Http.createHttpContext cfg.SourceBaseUrl sourceToken verbose
         Ok (Accounting.ofHttp sourceHttp false)
     | None ->
         Error "Missing required environment variable NOCFO_SOURCE_TOKEN for `map accounts`."
@@ -304,7 +304,7 @@ let mapAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArg
     async {
         let businessId = args.GetResult(BusinessScopedArgs.BusinessId, defaultValue = "")
 
-        match getSourceAccounting toolContext.Config with
+        match getSourceAccounting toolContext.Config toolContext.Accounting.http.verbose with
         | Error configError ->
             eprintfn "%s" configError
             return ExitCodes.EX_CONFIG
@@ -599,9 +599,10 @@ let main argv =
             | None -> Console.Out
 
         try
-            let dryRun = results.Contains(CliArgs.DryRun)
+            let dryRun  = results.Contains(CliArgs.DryRun)
+            let verbose = results.Contains(CliArgs.Verbose)
             let profile = results.TryGetResult CliArgs.Profile
-            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun
+            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
 
             let subcommand = results.GetSubCommand()
             return!

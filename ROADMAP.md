@@ -112,7 +112,7 @@ Command matrix (list/update/delete/create × businesses/accounts/contacts/docume
 `delete businesses` intentionally omitted.
 `update documents` deferred to 4.4.
 
-### 4.3 Structured logging / observability
+### 4.3 Structured logging / observability — Done
 
 - Ensure all progress/status output goes to stderr; data output to stdout (partially done)
 - Add `--verbose` flag for HTTP-level debug output (request/response bodies, timing)

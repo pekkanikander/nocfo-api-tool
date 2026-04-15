@@ -22,7 +22,7 @@ type private StubHandler(respond: HttpRequestMessage -> HttpResponseMessage) =
 let private httpContext (handler: HttpMessageHandler) =
     let client = new HttpClient(handler)
     client.BaseAddress <- Uri("https://example.test/v1")
-    Http.ofHttpClient client "test-token"
+    Http.ofHttpClient client "test-token" false
 
 let private businessContext dryRun handler =
     { ctx =

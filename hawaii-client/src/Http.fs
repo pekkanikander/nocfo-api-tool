@@ -8,9 +8,10 @@ open FSharp.Control
 open NocfoApi.Http
 
 type HttpContext = {
-    client: HttpClient
-    token: string
+    client:  HttpClient
+    token:   string
     timeout: TimeSpan
+    verbose: bool
 }
 
 module Http =
@@ -23,16 +24,16 @@ module Http =
         | ClientError of url: Uri * statusCode: HttpStatusCode * body: string
         | ParseError of url: Uri * message: string
 
-    let ofHttpClient (client: HttpClient) (token: string) =
-        { client = client; token = token; timeout = TimeSpan.FromSeconds 30.0 }
+    let ofHttpClient (client: HttpClient) (token: string) (verbose: bool) =
+        { client = client; token = token; timeout = TimeSpan.FromSeconds 30.0; verbose = verbose }
 
-    let createHttpContext (baseAddress: Uri) (token: string) =
+    let createHttpContext (baseAddress: Uri) (token: string) (verbose: bool) =
         let client = new HttpClient()
         let baseStr = baseAddress.OriginalString.TrimEnd '/'
         // Ensure we always have a /v1 prefix at the HttpClient level
         client.BaseAddress <- Uri(baseStr + "/v1")
         client.Timeout <- TimeSpan.FromSeconds 30.0
-        ofHttpClient client token
+        ofHttpClient client token verbose
 
     let withAuth (httpContext: HttpContext) (request: HttpRequestMessage) =
         request.Headers.Authorization <- AuthenticationHeaderValue("Token", httpContext.token)
@@ -59,13 +60,18 @@ module Http =
         | code when int code >= 500 -> ServerError (url, code, body)
         | code -> ClientError (url, code, body)
 
-    let send (httpClient: HttpClient) (request: HttpRequestMessage) = async {
+    let send (httpContext: HttpContext) (request: HttpRequestMessage) = async {
         if request.Headers.Accept.Count = 0 then
             ignore (withAcceptJson request)
-        eprintfn "Sending request: %s %s" request.Method.Method request.RequestUri.OriginalString
+        if httpContext.verbose then
+            eprintfn "[http] %s %s" request.Method.Method request.RequestUri.OriginalString
+        let t0 = DateTime.UtcNow
         let! ct = Async.CancellationToken
-        use! response = httpClient.SendAsync(request, ct) |> Async.AwaitTask
+        use! response = httpContext.client.SendAsync(request, ct) |> Async.AwaitTask
         let! content = response.Content.ReadAsStringAsync() |> Async.AwaitTask
+        if httpContext.verbose then
+            let ms = int (DateTime.UtcNow - t0).TotalMilliseconds
+            eprintfn "[http] %s %dms" (response.StatusCode.ToString()) ms
         if response.IsSuccessStatusCode then
             return Ok content
         else
@@ -149,7 +155,7 @@ module Http =
                 |> withAuth httpContext
                 |> withAcceptJson
                 |> configure
-            let! result = send httpContext.client request
+            let! result = send httpContext request
             return deserialize<'Response> absoluteUrl result
         })
 

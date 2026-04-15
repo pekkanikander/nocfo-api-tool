@@ -66,8 +66,8 @@ module Runtime =
             | ProfileLoadError (name, message) ->
                 $"Cannot load profile '{name}': {message}"
 
-        let createContext (cfg: ToolConfig) (input: TextReader) (output: TextWriter) (dryRun: bool) : ToolContext =
-            let httpContext = Http.createHttpContext cfg.BaseUrl cfg.Token
+        let createContext (cfg: ToolConfig) (input: TextReader) (output: TextWriter) (dryRun: bool) (verbose: bool) : ToolContext =
+            let httpContext = Http.createHttpContext cfg.BaseUrl cfg.Token verbose
             let accounting = Accounting.ofHttp httpContext dryRun
             { Config = cfg; Accounting = accounting; Input = input; Output = output }
 
@@ -140,9 +140,9 @@ module Runtime =
                     ]
                 Error errors
 
-        let loadOrFail (profile: string option) (input: TextReader) (output: TextWriter) (dryRun: bool): ToolContext =
+        let loadOrFail (profile: string option) (input: TextReader) (output: TextWriter) (dryRun: bool) (verbose: bool) : ToolContext =
             match fromSources profile with
-            | Ok cfg -> createContext cfg input output dryRun
+            | Ok cfg -> createContext cfg input output dryRun verbose
             | Error errors ->
                 let errorMessages = errors |> List.map describeError |> String.concat "\n"
                 failwith $"Tool configuration failed: {errorMessages}"
