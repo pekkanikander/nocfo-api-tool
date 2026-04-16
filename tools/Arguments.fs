@@ -72,8 +72,8 @@ type CreateEntitiesArgs =
 
 [<RequireSubcommand>]
 type CliArgs =
-    | [< AltCommandLine("-o") >]                  Out     of outPath: string
-    | [< AltCommandLine("-i") >]                  In      of inPath: string
+    | [< AltCommandLine("-o"); Inherit >]         Out     of outPath: string
+    | [< AltCommandLine("-i"); Inherit >]         In      of inPath: string
     | [< AltCommandLine("-p") >]                  Profile of profileName: string
     | [< AltCommandLine("-n") >]                  DryRun
     | [< AltCommandLine("-v") >]                  Verbose
