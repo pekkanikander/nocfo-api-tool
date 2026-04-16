@@ -136,13 +136,22 @@ type DocumentCreatePayload =
     ``type``: JsonElement option
     blueprint: JsonElement option }
 
+[<CLIMutable>]
+type DocumentDelta =
+  { id: int; patch: NocfoApi.Types.PatchedDocumentInstanceRequest }
+  with
+    static member Create (id: int, patch: NocfoApi.Types.PatchedDocumentInstanceRequest) =
+      { id = id; patch = patch }
+
 type DocumentCommand =
-  | CreateDocument of DocumentCreatePayload
-  | DeleteDocument of documentId:int
+  | CreateDocument  of DocumentCreatePayload
+  | UpdateDocument  of DocumentDelta
+  | DeleteDocument  of documentId:int
 
 type DocumentResult =
-  | DocumentCreated of DocumentFull
-  | DocumentDeleted of int
+  | DocumentCreated  of DocumentFull
+  | DocumentUpdated  of DocumentFull
+  | DocumentDeleted  of int
 
 /// ------------------------------------------------------------
 /// Contacts
@@ -572,6 +581,18 @@ module Document =
     | Full _ -> async.Return (Ok doc)
     | Partial (_row, fetch) -> fetch ()
 
+  let private missingDocumentError (id: int) =
+    DomainError.Unexpected $"Alignment failure: missing document for CSV id {id}."
+
+  let fetchFull = EntityOps.fetchById Endpoints.documentById missingDocumentError
+
+  let diffToPatch : DocumentFull -> DocumentDelta -> Result<NocfoApi.Types.PatchedDocumentInstanceRequest option, DomainError> =
+    EntityOps.diffToPatch "document" (fun d -> d.id) (fun d -> d.id) (fun d -> d.patch)
+
+  let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<DocumentDelta, DomainError>>) =
+    EntityOps.executeDeltaUpdates
+      Endpoints.documentById DocumentUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
+
 ///
 /// Contact module operations
 ///
@@ -759,6 +780,10 @@ module Streams =
           sprintf "POST %s %s"
             (Endpoints.documentsBySlug context.key.slug)
             (serializeUntyped payload)
+      | DocumentCommand.UpdateDocument delta ->
+          sprintf "PATCH %s %s"
+            (Endpoints.documentById context.key.slug (string delta.id))
+            (serializeUntyped delta.patch)
       | DocumentCommand.DeleteDocument id ->
           sprintf "DELETE %s" (Endpoints.documentById context.key.slug (string id))
 
@@ -768,6 +793,11 @@ module Streams =
             Http.postJson<DocumentCreatePayload, DocumentFull>
               context.ctx.http (Endpoints.documentsBySlug context.key.slug) payload
             |> AsyncResult.map DocumentCreated
+      | DocumentCommand.UpdateDocument delta ->
+          fun () ->
+            Http.patchJson<NocfoApi.Types.PatchedDocumentInstanceRequest, DocumentFull>
+              context.ctx.http (Endpoints.documentById context.key.slug (string delta.id)) delta.patch
+            |> AsyncResult.map DocumentUpdated
       | DocumentCommand.DeleteDocument id ->
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.documentById context.key.slug (string id))

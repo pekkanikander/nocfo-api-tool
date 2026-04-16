@@ -29,62 +29,8 @@ The pattern is settled; this roadmap fills in the gaps that were consciously def
 
 ### 3.1 Self-contained binary builds — Done
 
-Goal: produce a single executable that runs without a .NET SDK or runtime installed.
-
-#### Approach
-
-Self-contained, single-file JIT publishing (not Native AOT — see audit below).
-Properties added to `tools/tools.fsproj`:
-
-```xml
-<AssemblyName>nocfo</AssemblyName>
-<PublishSingleFile>true</PublishSingleFile>
-<PublishReadyToRun>true</PublishReadyToRun>
-<PublishTrimmed>false</PublishTrimmed>   <!-- trimming unsafe; see audit below -->
-```
-
-Publish via `make publish` (see `Makefile`), which runs:
-
-```bash
-dotnet publish tools -r osx-arm64 --self-contained -o dist/osx-arm64
-dotnet publish tools -r linux-x64 --self-contained -o dist/linux-x64
-dotnet publish tools -r win-x64  --self-contained -o dist/win-x64
-```
-
-Expected artefact size: ~70–90 MB per platform (JIT runtime + FSharp.Core + CsvHelper;
-no trimming). On first launch .NET extracts native libs to a temp directory — acceptable
-for a developer tool.
-
-#### Native AOT audit — conclusion: not viable in 3.1
-
-`PatchShape<'Full,'Patch>` uses `FSharpType`/`FSharpValue` over generic type parameters:
-
-- `FSharpType.GetRecordFields(typeof<'Full>)` — record field discovery at runtime
-- `FSharpValue.PreComputeRecordConstructor(typeof<'Patch>)` — dynamic constructor compilation
-- `FSharpValue.GetUnionFields` / `MakeUnion` — option-type introspection
-
-For Native AOT, the trimmer must see every type accessed via reflection at publish time.
-F# does not support `[<DynamicallyAccessedMembers>]` on generic type parameters (a C#-only
-mechanism as of .NET 10), so neither `'Full` nor `'Patch` can be annotated, and the trimmer
-will silently remove the record fields and constructors that PatchShape uses at runtime.
-
-Native AOT becomes viable only after PatchShape is rewritten as SRTP `inline` functions
-(types resolved statically at compile time; no reflection, no trimmer problem). That rewrite
-is a natural follow-on to the Phase 2.3 genericisation work and is the preferred eventual path.
-
 ### 3.2 GitHub Actions CI pipeline — Done
 
-Triggers: push to main, pull requests
-
-Jobs:
-
-1. `build` — `dotnet build` for all projects
-2. `test` — `dotnet test tests/`
-3. `publish` — matrix over three RIDs, upload artifacts to GitHub Release on tag
-
-Why after 3.1: CI is much easier to set up clean in the new repo than to retrofit here.
-
----
 
 ## Phase 4 — Completeness (finish what was deferred during exploration)
 
@@ -113,7 +59,7 @@ Command matrix (list/update/delete/create × businesses/accounts/contacts/docume
 - Add `--verbose` flag for HTTP-level debug output (request/response bodies, timing)
 - Optional: `--log-format json` for machine-readable stderr (useful when scripting)
 
-### 4.4 Update documents
+### 4.4 Update documents — Work in progress
 
 `update documents` is the only remaining gap in the command matrix.
 `PatchedDocumentInstanceRequest` exists in the generated types.

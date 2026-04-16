@@ -131,6 +131,7 @@ let foldAccountCommandResults =
 let foldDocumentCommandResults =
     foldCommandResults (function
         | DocumentCreated document -> eprintfn "Created document %d (%s)" document.id (defaultArg document.number "<none>")
+        | DocumentUpdated document -> eprintfn "Updated document %d (%s)" document.id (defaultArg document.number "<none>")
         | DocumentDeleted id       -> eprintfn "Deleted document %d" id)
 
 let foldContactCommandResults =
@@ -195,6 +196,23 @@ let updateContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
             return 1
     }
 
+let updateDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    async {
+        let input = toolContext.Input
+        let! businessContext = getBusinessContext toolContext args
+        match businessContext with
+        | Ok ctx ->
+            let csvStream =
+                Nocfo.Csv.readDeltas<DocumentDelta, int, NocfoApi.Types.PatchedDocumentInstanceRequest> "id" input (Some fields)
+                |> AsyncSeq.map Ok
+            return!
+                Document.executeDeltaUpdates ctx csvStream
+                |> foldDocumentCommandResults
+        | Error error ->
+            eprintfn "Failed to get business context: %A" error
+            return 1
+    }
+
 let private deleteEntities<'Command, 'Result>
     (toolContext: ToolContext)
     (args: ParseResults<BusinessScopedArgs>)
@@ -245,6 +263,7 @@ let update  (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Businesses args -> updateBusinesses toolContext args fields
             | EntitiesArgs.Accounts args   -> updateAccounts toolContext args fields
             | EntitiesArgs.Contacts args   -> updateContacts toolContext args fields
+            | EntitiesArgs.Documents args  -> updateDocuments toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
 
