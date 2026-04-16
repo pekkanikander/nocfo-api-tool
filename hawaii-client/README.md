@@ -8,7 +8,7 @@ domain, patch, reports, and CSV layers.
 
 ## Layout
 
-```
+```tree
 hawaii-client/
 ├── generated/              # Hawaii output kept committed for reproducible builds
 │   ├── Types.fs            # DTOs (Paginated* etc.)
@@ -20,6 +20,7 @@ hawaii-client/
 │   ├── Http.fs             # Token-aware HttpClient wiring + retry/error handling
 │   ├── AsyncSeq.fs         # Pagination helpers and alignment utilities
 │   ├── Streams.fs          # AsyncSeq helpers over paginated endpoints
+│   ├── JsonHelpers.fs      # Shared System.Text.Json helpers for free-form fields
 │   ├── PatchShape.fs       # Typed PATCH normalization/diff helpers
 │   ├── Domain.fs           # Hydratable entities + command execution
 │   ├── Reports.fs          # Small fold/report helpers
@@ -45,6 +46,7 @@ surface or CSV helpers, remember that the CLI depends on those modules directly.
 - If a local `.env` exists, you may `source .env` before running commands here. That file is local-only and not committed to GitHub.
 
 Token management portals:
+
 - Test: <https://login-tst.nocfo.io/auth/tokens/>
 - (Production: <https://login.nocfo.io/auth/tokens/>)
 
@@ -144,18 +146,16 @@ Commit the updated schema before running Hawaii so the generated sources remain 
 
 We keep the generated code checked in so you can build immediately. Regenerate only when the upstream OpenAPI spec changes.
 
-1. From the repo root, build the local Hawaii fork:
+1. From the repo root, build the local Hawaii clone:
+
    ```bash
    dotnet build vendor/Hawaii/src/Hawaii.fsproj -c Release
    ```
 
-Our forked generator in `vendor/Hawaii` includes fixes for nullable fields,
-enum parsing, and operation name normalization that we relied on during November 2025.
-If you use an upstream Hawaii, cross-check that those fixes have landed.
-
 2. Still from the repo root, run the resulting Hawaii CLI against `hawaii-client/nocfo-api-hawaii.json`:
+
    ```bash
-   dotnet ./vendor/Hawaii/src/bin/Release/net6.0/Hawaii.dll \
+   dotnet ./vendor/Hawaii/src/bin/Release/net10.0/Hawaii.dll \
       --config ./hawaii-client/nocfo-api-hawaii.json \
       --no-logo
    ```
@@ -169,13 +169,17 @@ If you use an upstream Hawaii, cross-check that those fixes have landed.
    dotnet test
    ```
 
-**Operational note:** the local Hawaii fork still targets `net6.0`, so modern .NET SDKs emit support warnings during build. That warning is expected for now.
-
-**Known generator workaround:**
+**Known generator workarounds:**
 `hawaii-client/nocfo-api-hawaii.json` overrides `AttachmentInstance.analysis_results` to a dummy nullable string.
-Hawaii (as of Nov 2025) cannot serialize multipart fields that are arrays of objects,
-so this keeps the generated client compiling even though the upload endpoint still accepts the real structure server-side.
-If you start using that endpoint, revisit the override (or teach Hawaii how to encode complex multipart parts).
+There is runtime drift between the spec and `api-tst`:
+file-retrieve responses include `AttachmentAnalysis.analysis_data: null`,
+while the OpenAPI schema models that nested field as required/non-null.
+Without the override, the regenerated client compiles, but file-retrieve deserialization becomes unsafe at runtime.
+
+The same override file also patches `DocumentList` and `DocumentInstance` for current `api-tst` document responses.
+`period` is emitted as an integer ID at runtime even though the checked-in OpenAPI schema models it as a nullable string,
+and `has_ai_generated_description` is omitted entirely even though the schema/generator treated it as a required `bool`.
+Without those overrides, regenerated document listing/retrieval types deserialize unsafely and `list documents` fails at runtime.
 
 ## Optional: Spec Drift Check (not recommended)
 

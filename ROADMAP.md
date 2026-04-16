@@ -88,15 +88,10 @@ Why after 3.1: CI is much easier to set up clean in the new repo than to retrofi
 
 ## Phase 4 — Completeness (finish what was deferred during exploration)
 
-### 4.1 Resolve the Hawaii fork — In progress (will take weeks)
+### 4.1 Resolve the Hawaii fork — Done
 
-The local fork of Hawaii targets `net6.0` (EOL) and carries three patches.
-Options (in order of preference):
+The main Hawaii generator has been updated and retargeted to `net10.0` a.
 
-1. Open PRs upstream for each patch; depend on a released Hawaii version
-2. If upstream is unresponsive: retarget the fork to `net10.0`
-3. Evaluate whether the generated code surface still justifies a generator at all
-   (the API is larger now, so probably yes)
 
 ### 4.2 Complete missing CLI commands — Done
 
@@ -169,7 +164,7 @@ complete F# CLI with CSV import/export for all entity types, replacing most of t
 hand-written code in this repo. Several architectures were evaluated:
 
 - **Extend Hawaii directly** — single tool, but pollutes the generator with two concerns;
-  makes upstreaming patches harder; Hawaii is already on an EOL runtime
+  makes upstreaming patches harder;
 - **Pipeline (Hawaii + second-pass CLI generator)** — clean separation; Hawaii unchanged;
   new generator emits `Streaming.fs`, `Arguments.fs`, `Dispatch.fs` per entity
 - **Full standalone generator** — maximum control, but reimplements everything Hawaii

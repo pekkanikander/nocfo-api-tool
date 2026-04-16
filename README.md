@@ -125,8 +125,9 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
   `id` is always required when executing updates or deletes.
 - Output defaults to stdout and input defaults to stdin;
   `--out`/`--in` override those streams without shell redirection.
-- Currently implemented verbs: `list`, `update accounts`, `update contacts`, `delete accounts`,
-  `delete contacts`, `delete documents`, `map accounts`, and minimal `create documents`.
+- Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,
+  `update contacts`; `delete accounts`, `delete contacts`, `delete documents`; `create businesses`,
+  `create accounts`, `create contacts`, and minimal `create documents`; plus `map accounts`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,
@@ -187,7 +188,7 @@ Regenerate only when the NoCFO OpenAPI spec changes.
 3. From the **repo root**, run the built Hawaii CLI against the curated config:
 
    ```bash
-   dotnet ./vendor/Hawaii/src/bin/Release/net6.0/Hawaii.dll \
+   dotnet ./vendor/Hawaii/src/bin/Release/net10.0/Hawaii.dll \
      --config ./hawaii-client/nocfo-api-hawaii.json \
      --no-logo
    ```
@@ -200,7 +201,6 @@ Regenerate only when the NoCFO OpenAPI spec changes.
 
 Notes:
 
-- The current local Hawaii fork targets `net6.0`, so newer SDKs emit end-of-support warnings during build.
 - `hawaii-client/nocfo-api-hawaii.json` currently assumes you run Hawaii from the repo root:
   `schema` is resolved from the current working directory, while `output` is resolved relative to the config file.
 

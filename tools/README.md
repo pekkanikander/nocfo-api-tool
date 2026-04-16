@@ -20,7 +20,7 @@ dotnet run --project tools -- list accounts \
   -b <business-id> --fields id number name type > accounts.csv
 
 dotnet run --project tools -- list contacts \
-  -b <business-id> --fields "id,name,email,identifier" > contacts.csv
+  -b <business-id> --fields "id,name,invoicing_email,customer_id" > contacts.csv
 
 dotnet run --project tools -- list documents \
   -b <business-id> --fields "id,number,date,balance" > documents.csv
@@ -80,11 +80,15 @@ Read-only commands:
 
 Mutating commands:
 
+- `update businesses`
 - `update accounts`
 - `update contacts`
 - `delete accounts`
 - `delete contacts`
 - `delete documents`
+- `create businesses`
+- `create accounts`
+- `create contacts`
 - `create documents`
 
 | Command | Description | Notes |
@@ -92,20 +96,23 @@ Mutating commands:
 | `list businesses [--fields …]` | Streams every business the token can access and writes CSV | Default columns are the DTO fields; use `--fields` to select a subset |
 | `list accounts -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams accounts, hydrates them, writes CSV | Rows are currently emitted in API order |
 | `list contacts -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams contacts, hydrates them, writes CSV | Contacts are emitted from the `/contacts/` endpoint |
-| `list documents -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams documents, hydrates them, writes CSV | Documents are currently list-only in the CLI |
+| `list documents -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams documents, hydrates them, writes CSV | Document mutation commands are separate (`delete documents`, minimal `create documents`) |
+| `update businesses [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current business by `slug`, and emits PATCH requests for changed fields only | CSV **must** include `slug`; rows are processed in CSV order |
 | `update accounts -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current account by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
 | `update contacts -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current contact by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
 | `delete accounts -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `delete contacts -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `delete documents -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `map accounts -b <id>` | Resolves source+target business contexts and emits `source_id,target_id,number` matches by account `number` | Prints missing-target warnings to stderr; exit code is `EX_DATAERR` when warnings exist |
+| `create businesses [--fields …]` | Reads business-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `slug`, optional `business_id`, and optional `form` |
+| `create accounts -b <id> [--fields …]` | Reads account-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `number`, `name`, optional `type`, `description`, and `opening_balance` |
+| `create contacts -b <id> [--fields …]` | Reads contact-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `type`, `customer_id`, `contact_business_id`, `notes`, and `phone_number` |
 | `create documents -b <id> [--account-id-map <path>] [--strict] [--fields …]` | Reads minimal document-create CSV and POSTs documents sequentially | Optional blueprint account-id remap via mapping CSV |
 
-Unimplemented (exit code `1` with a TODO):
+Still unimplemented:
 
-- `update businesses`
 - `update documents`
-- `create accounts` / `create businesses` (alignment currently assumes “desired state” rather than inserts)
+- `delete businesses` (intentionally omitted)
 
 ## CSV expectations
 
@@ -193,16 +200,16 @@ The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` fr
 - **Runtime + Streams** (`Tools.fs`): layers profile settings under env vars, builds `AccountingContext`, and routes CSV readers/writers.
 - **Program flow** (`Program.fs`):
   - `list` commands: stream via `Streams.streamBusinesses`, `Streams.streamAccounts`, `Streams.streamContacts`, or `Streams.streamDocuments`, hydrate rows (`Streams.hydrateAndUnwrap`), write CSV lazily.
-  - `update` accounts/contacts: read CSV into repo-owned delta records (`AccountDelta` / `ContactDelta`), fetch the current entity for each CSV `id`, normalize against that fresh API state, and PATCH immediately when something changed.
+  - `update businesses/accounts/contacts`: read CSV into repo-owned delta records, fetch the current entity (`slug` for businesses, `id` for accounts/contacts), normalize against that fresh API state, and PATCH immediately when something changed.
   - `delete` accounts/contacts/documents: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
   - `map accounts`: align source/target account streams by `number` and output `source_id,target_id,number`.
-  - `create documents`: read minimal create payload rows, optionally rewrite blueprint account IDs, then POST documents sequentially through `Streams.executeDocumentCommands`.
+  - `create` businesses/accounts/contacts/documents: read create payload rows, optionally rewrite blueprint account IDs for documents, and POST sequentially through the shared command stream machinery.
 
 Everything runs on `AsyncSeq`, so listing scales to large datasets without holding them all in memory.
 
 ## Limitations / future work
 
-- Business updates and account creation are placeholders.
+- `update documents` remains the main command-surface gap.
 - `update` trades extra GET requests for streaming-friendly semantics; large CSV updates are network-bound.
 - Standalone binaries are published through GitHub Releases.
 
