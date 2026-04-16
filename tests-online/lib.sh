@@ -67,6 +67,18 @@ Current value: ${TEST_BUSINESS_SLUG:-<unset>}
 EOF
     exit 2
   fi
+
+}
+
+require_mutate_fixtures() {
+  if [ -z "${TEST_ACCOUNT_ID:-}" ] || [ "${TEST_ACCOUNT_ID}" = "replace-me-with-stable-account-id" ]; then
+    cat >&2 <<EOF
+${ONLINE_FIXTURE_FILE} must define TEST_ACCOUNT_ID with a stable api-tst account id.
+
+Current value: ${TEST_ACCOUNT_ID:-<unset>}
+EOF
+    exit 2
+  fi
 }
 
 build_cli_once() {
@@ -155,6 +167,24 @@ sys.exit(1)
 PY
 }
 
+csv_get_value() {
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
+import csv
+import sys
+
+path, id_col, id_val, target_col = sys.argv[1:]
+
+with open(path, newline="", encoding="utf-8") as fh:
+    for row in csv.DictReader(fh):
+        if (row.get(id_col) or "").strip() == id_val:
+            print(row.get(target_col, ""), end="")
+            sys.exit(0)
+
+print(f"{path} has no row where {id_col}={id_val!r}.", file=sys.stderr)
+sys.exit(1)
+PY
+}
+
 stderr_has_unhandled_exception() {
   local stderr_file="$1"
   grep -Eq 'Unhandled exception|^[[:space:]]+at |^System\.[[:alnum:]_.`]+:|^Microsoft\.[[:alnum:]_.`]+:' "${stderr_file}"
@@ -225,6 +255,118 @@ run_list_case() {
     while IFS= read -r line; do
       [ -n "${line}" ] && printf '    - %s\n' "${line}"
     done <<< "${failures}"
+    return 1
+  fi
+
+  PASS_COUNT=$((PASS_COUNT + 1))
+  printf 'PASS %s\n' "${case_name}"
+  return 0
+}
+
+run_mutate_case() {
+  local case_name="$1"
+  local entity_id="$2"
+  local field="$3"
+  local new_value="$4"
+  shift 4
+  # Remaining args are the entity sub-command and its flags, e.g.:
+  #   accounts -b <slug>
+
+  local case_slug
+  case_slug="$(printf '%s' "${case_name}" | tr ' /' '__')"
+
+  local list_stdout="${WORK_DIR}/${case_slug}.list1.stdout"
+  local list2_stdout="${WORK_DIR}/${case_slug}.list2.stdout"
+  local mutate_csv="${WORK_DIR}/${case_slug}.mutate.csv"
+  local restore_csv="${WORK_DIR}/${case_slug}.restore.csv"
+  local update_stderr="${WORK_DIR}/${case_slug}.update.stderr"
+  local restore_stderr="${WORK_DIR}/${case_slug}.restore.stderr"
+
+  local -a list_cmd=(
+    dotnet run --project tools --no-build --
+    --profile "${ONLINE_PROFILE_NAME}" --verbose
+    list "$@" --fields "id,${field}"
+  )
+  local -a update_cmd=(
+    dotnet run --project tools --no-build --
+    --profile "${ONLINE_PROFILE_NAME}" --verbose
+    update "$@" --fields "id,${field}"
+  )
+
+  local exit_code failures="" original_value found_value message
+
+  # --- Step 1: read current state ---
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${list_cmd[@]}") >"${list_stdout}" 2>/dev/null
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ]; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (list step failed with exit code %s)\n' "${case_name}" "${exit_code}"
+    return 1
+  fi
+
+  original_value=""
+  if ! original_value="$(csv_get_value "${list_stdout}" "id" "${entity_id}" "${field}" 2>&1)"; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (could not find entity id=%s: %s)\n' "${case_name}" "${entity_id}" "${original_value}"
+    return 1
+  fi
+
+  # --- Step 2: mutate ---
+  printf 'id,%s\n%s,%s\n' "${field}" "${entity_id}" "${new_value}" > "${mutate_csv}"
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${update_cmd[@]}" --in "${mutate_csv}") >/dev/null 2>"${update_stderr}"
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ] || stderr_has_unhandled_exception "${update_stderr}"; then
+    failures="${failures}mutate step failed (exit ${exit_code})"$'\n'
+  fi
+
+  # --- Step 3: verify ---
+  if [ -z "${failures}" ]; then
+    exit_code=0
+    set +e
+    (cd "${REPO_ROOT}"; "${list_cmd[@]}") >"${list2_stdout}" 2>/dev/null
+    exit_code=$?
+    set -e
+
+    if [ "${exit_code}" -ne 0 ]; then
+      failures="${failures}verify list failed (exit ${exit_code})"$'\n'
+    else
+      found_value=""
+      if ! found_value="$(csv_get_value "${list2_stdout}" "id" "${entity_id}" "${field}" 2>&1)"; then
+        failures="${failures}verify: entity id=${entity_id} not found after mutate"$'\n'
+      elif [ "${found_value}" != "${new_value}" ]; then
+        failures="${failures}verify: expected ${field}=${new_value!r}, got '${found_value}'"$'\n'
+      fi
+    fi
+  fi
+
+  # --- Step 4: restore (attempted even on verify failure) ---
+  printf 'id,%s\n%s,%s\n' "${field}" "${entity_id}" "${original_value}" > "${restore_csv}"
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${update_cmd[@]}" --in "${restore_csv}") >/dev/null 2>"${restore_stderr}"
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ] || stderr_has_unhandled_exception "${restore_stderr}"; then
+    failures="${failures}restore step failed (exit ${exit_code}) — tst state may be dirty"$'\n'
+  fi
+
+  if [ -n "${failures}" ]; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s\n' "${case_name}"
+    printf '  reasons:\n'
+    while IFS= read -r line; do
+      [ -n "${line}" ] && printf '    - %s\n' "${line}"
+    done <<< "${failures}"
+    printf '  artifacts: %s\n' "${WORK_DIR}"
     return 1
   fi
 
