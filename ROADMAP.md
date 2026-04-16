@@ -36,38 +36,13 @@ The pattern is settled; this roadmap fills in the gaps that were consciously def
 
 ### 4.1 Resolve the Hawaii fork — Done
 
-The main Hawaii generator has been updated and retargeted to `net10.0` a.
-
-
 ### 4.2 Complete missing CLI commands — Done
 
-Command matrix (list/update/delete/create × businesses/accounts/contacts/documents):
-
-| | list | update | delete | create |
-| --- | --- | --- | --- | --- |
-| businesses | ✅ | ✅ | — | ✅ |
-| accounts | ✅ | ✅ | ✅ | ✅ |
-| contacts | ✅ | ✅ | ✅ | ✅ |
-| documents | ✅ | — | ✅ | ✅ |
-
 `delete businesses` intentionally omitted.
-`update documents` deferred to 4.4.
 
 ### 4.3 Structured logging / observability — Done
 
-- Ensure all progress/status output goes to stderr; data output to stdout (partially done)
-- Add `--verbose` flag for HTTP-level debug output (request/response bodies, timing)
-- Optional: `--log-format json` for machine-readable stderr (useful when scripting)
-
-### 4.4 Update documents — Work in progress
-
-`update documents` is the only remaining gap in the command matrix.
-`PatchedDocumentInstanceRequest` exists in the generated types.
-Implementation follows the account/contact `update` pattern:
-
-- Add `DocumentDelta = { id: int; patch: PatchedDocumentInstanceRequest }` with `Create`
-- Add `Document.fetchFull`, `Document.diffToPatch`, `Document.executeDeltaUpdates`
-- Wire `update documents` in `Program.fs` and add `Documents` to the `update` dispatch
+### 4.4 Update documents — Done
 
 ---
 
