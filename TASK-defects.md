@@ -159,7 +159,7 @@ server-side wart; harmless here because nothing in this repo reads the field.
 
 ---
 
-## D4 — `Business.ofRaw` / `fetchBySlug` index `identifiers.[0]` unconditionally
+## D4 — `Business.ofRaw` / `fetchBySlug` index `identifiers.[0]` unconditionally — **FIXED**
 
 **Severity: medium.** [Domain.fs:448](hawaii-client/src/Domain.fs#L448),
 [Domain.fs:465](hawaii-client/src/Domain.fs#L465), [Domain.fs:494](hawaii-client/src/Domain.fs#L494),
@@ -172,6 +172,19 @@ runs — if any business in the account lacks an identifier.
 **Fix**: make `BusinessKey.id` a `BusinessIdentifier option`, or fail with a
 `DomainError.Unexpected` naming the offending slug. The four call sites should share one
 `BusinessFull` constructor rather than repeating the record literal.
+
+**Fixed** by deleting the field instead. `BusinessKey.id` was never read — not by the library, not
+by `tools/`, not by the tests. Every business-scoped endpoint takes the slug, `BusinessResolver`
+matches on `full.raw.identifiers` directly, and `BusinessKey` is the *partial* half of
+`Hydratable`, i.e. exactly what is needed to fetch the full form. So the crash was paid for a value
+nothing wanted. `BusinessKey` is now `{ slug: string }`, and the five record literals collapse into
+`Business.fullOfRaw fallbackSlug raw`.
+
+The optional `slug` in the same `XXX fixme` keeps its `"(none)"` fallback, now named
+`Business.UnknownSlug`: it matches no endpoint, so `-b "(none)"` fails with the ordinary
+"No matching business" error rather than issuing a nonsense request.
+
+Covered by two cases in `tests/DomainDiffTests.fs` (empty `identifiers`; absent `slug`).
 
 ---
 

@@ -34,9 +34,7 @@ let private businessContext dryRun handler =
               loggingPolicy = None
               cachingPolicy = None
               dryRun = dryRun } }
-      key =
-        { id = BusinessIdentifier.Create(0, jsonString "y_tunnus", "1234567-8")
-          slug = "acme" } }
+      key = { slug = "acme" } }
 
 let private jsonResponse statusCode body =
     let response = new HttpResponseMessage(statusCode)

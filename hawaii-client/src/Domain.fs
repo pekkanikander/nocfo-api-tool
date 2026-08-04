@@ -36,11 +36,10 @@ type Hydratable<'Full,'Partial> =
 
 /// Businesses
 
-/// Businesses are identified by their VAT ID or other similar identifier, and a slug.
-/// This identifier is assumed to be serializable, immutable and stable.
-/// The slug is fetched lazily from the API on demand.
+/// Businesses are addressed by their slug: it is what every business-scoped endpoint takes.
+/// The VAT ID and other identifiers a caller may search on live in `BusinessFull.raw.identifiers`,
+/// which is allowed to be empty.
 type BusinessKey = {
-  id: NocfoApi.Types.BusinessIdentifier
   slug: string
 }
 
@@ -426,30 +425,29 @@ module EntityOps =
 ///
 
 module Business =
+  /// The one place a BusinessFull is built from an API response. `fallbackSlug` covers the
+  /// spec's optional `slug`; where no better candidate exists the caller passes `UnknownSlug`,
+  /// which no endpoint will match.
+  let fullOfRaw (fallbackSlug: string) (raw: NocfoApi.Types.Business) : BusinessFull =
+    { key  = { slug = defaultArg raw.slug fallbackSlug }
+      meta = { name = raw.name; country = Some raw.country }
+      raw  = raw }
+
+  let [<Literal>] UnknownSlug = "(none)"
+
   let ofContext (context: BusinessContext) : Business =
     Hydratable.Partial (context.key, fetch = fun () -> async {
       let! result =
         Http.getJson<NocfoApi.Types.Business> context.ctx.http (Endpoints.businessBySlug context.key.slug)
       match result with
       | Result.Ok business ->
-          let full : BusinessFull =
-            { key  = context.key
-              meta = { name = business.name; country = Some business.country };
-              raw  = business }
-          return Ok (Business.Full full)
+          return Ok (Business.Full (fullOfRaw context.key.slug business))
       | Result.Error httpErr ->
           return Error (DomainError.Http httpErr)
     })
 
   let ofRaw (raw: NocfoApi.Types.Business) : Business =
-    let full : BusinessFull =
-      {
-        // XXX fixme: what if there are no identifiers or no slug
-        key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug "(none)" }
-        meta = { name = raw.name; country = Some raw.country };
-        raw  = raw
-      }
-    Business.Full full
+    Business.Full (fullOfRaw UnknownSlug raw)
 
   let hydrate (business: Business) : Async<Result<Business, DomainError>> =
     match business with
@@ -461,11 +459,7 @@ module Business =
       let! result = Http.getJson<NocfoApi.Types.Business> context.http (Endpoints.businessBySlug slug)
       match result with
       | Ok raw ->
-          let full : BusinessFull =
-            { key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug slug }
-              meta = { name = raw.name; country = Some raw.country }
-              raw  = raw }
-          return Ok full
+          return Ok (fullOfRaw slug raw)
       | Error (NotFound _) ->
           return Error (DomainError.Unexpected $"Business not found: {slug}")
       | Error err ->
@@ -489,12 +483,7 @@ module Business =
         Http.patchJson<NocfoApi.Types.PatchedBusinessRequest, NocfoApi.Types.Business>
           context.http (Endpoints.businessBySlug slug) patch
         |> AsyncResult.mapError DomainError.Http
-        |> AsyncResult.map (fun raw ->
-            let full : BusinessFull =
-              { key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug slug }
-                meta = { name = raw.name; country = Some raw.country }
-                raw  = raw }
-            Some (BusinessUpdated full))
+        |> AsyncResult.map (fun raw -> Some (BusinessUpdated (fullOfRaw slug raw)))
 
     DeltaUpdate.run (fun (d: BusinessDeltaRow) -> d.slug) (fetchBySlug context) diffToPatch handlePatch deltas
 
@@ -866,11 +855,7 @@ module Streams =
           context.http Endpoints.businessListUrl req
         |> AsyncResult.mapError DomainError.Http
         |> AsyncResult.map (fun raw ->
-            let full : BusinessFull =
-              { key  = { id = raw.identifiers.[0]; slug = defaultArg raw.slug "(none)" }
-                meta = { name = raw.name; country = Some raw.country }
-                raw  = raw }
-            Some (BusinessCreated full))
+            Some (BusinessCreated (Business.fullOfRaw (defaultArg payload.slug Business.UnknownSlug) raw)))
 
     asyncSeq {
       try
