@@ -43,7 +43,7 @@ let private jsonResponse statusCode body =
     response.Content <- new StringContent(body)
     response
 
-let private makeAccount (id: int) (name: string) (number: string) : AccountFull =
+let makeAccount (id: int) (name: string) (number: string) : AccountFull =
     Account.Create(
         id = id,
         created_at = DateTimeOffset.UtcNow,

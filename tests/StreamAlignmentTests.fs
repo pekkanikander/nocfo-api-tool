@@ -81,3 +81,10 @@ let ``Left key strictly less than all right keys`` () =
 let ``Right key strictly less than all left keys`` () =
     let result = align [10; 20] [1; 2]
     test <@ result = [ MissingLeft 1; MissingLeft 2; MissingRight 10; MissingRight 20 ] @>
+
+// ── Unsorted input ────────────────────────────────────────────────────────────
+
+[<Fact>]
+let ``Unsorted input is rejected rather than silently desynchronising the merge`` () =
+    Assert.Throws<StreamOrderException>(fun () -> align [1; 3; 2] [1; 2; 3] |> ignore) |> ignore
+    Assert.Throws<StreamOrderException>(fun () -> align [1; 2; 3] [3; 2; 1] |> ignore) |> ignore

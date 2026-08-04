@@ -13,6 +13,9 @@ type StreamAlignment<'T1, 'T2> =
     | MissingLeft  of 'T2  // There is no left item for this right item
     | MissingRight of 'T1  // There is no right item for this left item
 
+/// An input of `alignByKey` is not sorted by the key it is aligned on.
+exception StreamOrderException of message: string
+
 module Streams =
 
     let alignByKey<'L, 'R, 'Key when 'Key : comparison>
@@ -31,16 +34,28 @@ module Streams =
 
             let mutable lBuf : 'L option = None
             let mutable rBuf : 'R option = None
+            let mutable lastL : 'Key option = None
+            let mutable lastR : 'Key option = None
             let mutable finished = false
+
+            // The merge only works on inputs sorted by the alignment key; unsorted input
+            // would otherwise desynchronise it silently.
+            let checkOrder (side: string) (previous: 'Key option) (current: 'Key) =
+                match previous with
+                | Some prev when compare prev current > 0 ->
+                    raise (StreamOrderException $"The {side} stream is not sorted by the alignment key: %A{prev} precedes %A{current}")
+                | _ -> Some current
 
             while not finished do
                 // fill buffers if empty
                 if lBuf.IsNone then
                     let! lOpt = moveNext eL
                     lBuf <- lOpt
+                    lOpt |> Option.iter (fun l -> lastL <- checkOrder "left" lastL (keyL l))
                 if rBuf.IsNone then
                     let! rOpt = moveNext eR
                     rBuf <- rOpt
+                    rOpt |> Option.iter (fun r -> lastR <- checkOrder "right" lastR (keyR r))
 
                 match lBuf, rBuf with
                 | None, None ->

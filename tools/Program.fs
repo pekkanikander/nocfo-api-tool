@@ -312,10 +312,6 @@ let delete (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | _ -> failwith "Unknown entity type"
     }
 
-type private MapAccountsOutcome =
-    | Mapped of Mapping.IDMap
-    | MissingTarget of AccountFull
-
 let private getSourceAccounting (cfg: ToolConfig) (verbose: bool) =
     match cfg.SourceToken with
     | Some sourceToken ->
@@ -323,6 +319,45 @@ let private getSourceAccounting (cfg: ToolConfig) (verbose: bool) =
         Ok (Accounting.ofHttp sourceHttp false)
     | None ->
         Error "Missing required environment variable NOCFO_SOURCE_TOKEN for `map accounts`."
+
+/// Pairs source accounts with target accounts on account number, yielding the mappings in
+/// source order together with the source accounts that have no target counterpart.
+/// The target chart is indexed rather than merged as an ordered stream: the API does not
+/// document the order it lists accounts in, and an ordered merge silently drops rows
+/// whenever the two orders disagree (e.g. `999` against `1000`).
+let mapAccountRows
+    (sourceAccounts: AsyncSeq<Result<AccountFull, DomainError>>)
+    (targetAccounts: AsyncSeq<Result<AccountFull, DomainError>>)
+    : Async<Result<Mapping.IDMap list * AccountFull list, DomainError>> =
+
+    let collect folder initial (stream: AsyncSeq<Result<'T, DomainError>>) =
+        stream
+        |> AsyncSeq.takeWhileInclusive Result.isOk
+        |> AsyncSeq.fold (fun state result ->
+            match state, result with
+            | Error _, _ -> state
+            | _, Error err -> Error err
+            | Ok acc, Ok item -> Ok (folder acc item)) (Ok initial)
+
+    async {
+        let! targetIndex =
+            targetAccounts
+            |> collect (fun index (target: AccountFull) -> Map.add target.number target index) Map.empty
+
+        match targetIndex with
+        | Error err -> return Error err
+        | Ok index ->
+            let! paired =
+                sourceAccounts
+                |> collect (fun (rows, missing) (source: AccountFull) ->
+                    match Map.tryFind source.number index with
+                    | Some target ->
+                        ({ source_id = source.id
+                           target_id = target.id
+                           number = source.number } : Mapping.IDMap) :: rows, missing
+                    | None -> rows, source :: missing) ([], [])
+            return paired |> Result.map (fun (rows, missing) -> List.rev rows, List.rev missing)
+    }
 
 let mapAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) =
     async {
@@ -352,51 +387,24 @@ let mapAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArg
                     Streams.streamAccounts targetContext
                     |> Streams.hydrateAndUnwrap
 
-                let outcomes =
-                    Alignment.alignEntries<AccountFull, AccountFull, string, MapAccountsOutcome option>
-                        (fun source -> source.number)
-                        (fun target -> target.number)
-                        (fun source target ->
-                            Ok (Some (Mapped { source_id = source.id; target_id = target.id; number = source.number })))
-                        (fun _targetOnly -> Ok None)
-                        (fun sourceOnly -> Ok (Some (MissingTarget sourceOnly)))
-                        sourceAccounts
-                        targetAccounts
+                let! paired = mapAccountRows sourceAccounts targetAccounts
 
-                let! warnings, rowsReversed, firstError =
-                    outcomes
-                    |> AsyncSeq.fold (fun (warnings, rows, firstError) outcome ->
-                        match outcome with
-                        | Error err ->
-                            let updatedFirstError =
-                                match firstError with
-                                | Some _ -> firstError
-                                | None -> Some err
-                            warnings, rows, updatedFirstError
-                        | Ok None ->
-                            warnings, rows, firstError
-                        | Ok (Some (Mapped row)) ->
-                            warnings, row :: rows, firstError
-                        | Ok (Some (MissingTarget sourceAccount)) ->
-                            eprintfn "Warning: no target mapping for source account id=%d number=%s" sourceAccount.id sourceAccount.number
-                            warnings + 1, rows, firstError) (0, [], None)
-
-                match firstError with
-                | Some err ->
-                    eprintfn "Mapping failed: %A" err
+                match paired with
+                | Error err ->
                     return mapDomainErrorToExitCode err
-                | None ->
-                    let rows = rowsReversed |> List.rev
+                | Ok (rows, missing) ->
+                    for account in missing do
+                        eprintfn "Warning: no target mapping for source account id=%d number=%s" account.id account.number
                     try
                         do!
                             rows
                             |> AsyncSeq.ofSeq
                             |> Nocfo.Csv.writeCsvGeneric<Mapping.IDMap> toolContext.Output None
                             |> AsyncSeq.iter ignore
-                        if warnings > 0 then
-                            return ExitCodes.EX_DATAERR
-                        else
+                        if List.isEmpty missing then
                             return ExitCodes.EX_OK
+                        else
+                            return ExitCodes.EX_DATAERR
                     with ex ->
                         eprintfn "Failed to write CSV output: %s" ex.Message
                         return ExitCodes.EX_SOFTWARE
@@ -553,7 +561,8 @@ let exitCodeForException (ex: exn) =
         ExitCodes.EX_USAGE
     | DomainStreamException err ->
         mapDomainErrorToExitCode err
-    | Nocfo.CsvFormatException message ->
+    | Nocfo.CsvFormatException message
+    | NocfoClient.StreamOrderException message ->
         eprintfn "%s" message
         ExitCodes.EX_DATAERR
     | :? FileNotFoundException

@@ -92,7 +92,7 @@ retried rather than surfaced.
 
 ---
 
-## D3 — `map accounts` mis-aligns when account numbers have unequal digit counts
+## D3 — `map accounts` mis-aligns when account numbers have unequal digit counts — **FIXED**
 
 **Severity: medium-high.** `tools/Program.fs:351`, `hawaii-client/src/Streams.fs:18`
 
@@ -119,6 +119,25 @@ the NoCFO schema permits up to 7 characters.
 Same latent issue in `EntityOps.deltasToCommands`, which keys accounts on `id` while the API
 returns them ordered by number — currently harmless because only tests call it, but it should
 either be fixed or deleted (see D7).
+
+**Fixed**: not by the key swap proposed above. Neither the spec nor the API tells us what the
+server actually orders accounts by: `padded_number` is documented only as `readOnly integer`, and
+its two plausible meanings (`int(number)`, or the number right-padded to a fixed width) give
+*opposite* orders for exactly the `999` / `1000` case at issue. Swapping one unverified ordering
+assumption for another is not a fix, so `mapAccounts` no longer assumes an order at all: the new
+`Program.mapAccountRows` indexes the target chart of accounts into a `Map` keyed on `number` and
+looks each source account up in it. This is order-independent by construction. It buffers the
+target chart, which is bounded and small — and `map accounts` already buffered the entire result
+before writing the CSV, so nothing is lost.
+
+`Streams.alignByKey` now also raises `StreamOrderException` (→ `EX_DATAERR`) when either input is
+not sorted by the key it is aligned on, instead of silently desynchronising. That keeps the
+remaining and future users of the merge — `deltasToCommands`, and the reconcile stage of
+`PLAN-rolling-balance.md` — honest.
+
+Covered by `tests/MapAccountsTests.fs` (mixed-width numbers in either order, unmatched source
+accounts, target-only accounts, error propagation) and by the unsorted-input case in
+`tests/StreamAlignmentTests.fs`.
 
 ---
 

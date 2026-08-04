@@ -55,7 +55,8 @@ directories in this repo, despite what older docs and the README examples may im
 - Use `AsyncSeq` everywhere; never buffer full lists into memory.
   Note `NocfoClient.AsyncSeq.tryHead` violates this today — see `TASK-defects.md` D5.
 - `Streams.alignByKey` requires **both** inputs to be sorted by the *same* comparison as the key
-  function it is given. Getting this wrong desynchronises the merge silently.
+  function it is given; it raises `StreamOrderException` if they are not. Do not use it against
+  a stream whose order is not known — the API documents no ordering for its list endpoints.
 
 ### Full / Patch / Delta Pattern
 
