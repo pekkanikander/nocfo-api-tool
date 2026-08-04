@@ -3,6 +3,8 @@ node_modules
 .DS_Store
 tests-online/config/config.toml
 tests-online/config/fixture.env
+.claude/settings.local.json
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -18,6 +20,9 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+
+# Temp, to go away
+tmp/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
