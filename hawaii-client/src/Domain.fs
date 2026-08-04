@@ -17,6 +17,11 @@ open NocfoClient
 /// Domain-level error channel (extend as needed)
 type DomainError =
   | Http of Http.HttpError
+  /// The caller asked for something that cannot be served: an unknown source, a missing period,
+  /// a selection matching no account.
+  | Invalid of string
+  /// An input file does not hold what it claims to.
+  | BadData of string
   | Unexpected of string
 
 module DomainError =
@@ -556,6 +561,23 @@ module Account =
   let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<AccountDelta, DomainError>>) =
     EntityOps.executeDeltaUpdates
       Endpoints.accountById AccountUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
+
+///
+/// Ledger module operations
+///
+
+module Ledger =
+  /// The server's own ledger for a date range: one request covers every account and the whole
+  /// period. Its `opening_balance` is the balance carried into `dateFrom`, not the account's
+  /// configured opening balance, and `balance_csum` is the running balance including it.
+  let fetch (context: BusinessContext) (dateFrom: string) (dateTo: string)
+    : Async<Result<LedgerJsonResponse, DomainError>> =
+    let request =
+      DateRangeTypedReportRequestSchemaRequest.Create
+        [ DateRangeReportColumnSchemaRequest.Create(dateFrom, dateTo) ]
+    Http.postJson<DateRangeTypedReportRequestSchemaRequest, LedgerJsonResponse>
+      context.ctx.http (Endpoints.ledgerReport context.key.slug) request
+    |> AsyncResult.mapError DomainError.Http
 
 ///
 /// Document module operations

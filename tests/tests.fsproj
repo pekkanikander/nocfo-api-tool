@@ -28,5 +28,8 @@
     <Compile Include="BlueprintJsonTests.fs" />
     <Compile Include="MapAccountsTests.fs" />
     <Compile Include="ExitCodeTests.fs" />
+    <Compile Include="TitoTests.fs" />
+    <Compile Include="BalanceTests.fs" />
+    <Compile Include="ReconcileTests.fs" />
   </ItemGroup>
 </Project>

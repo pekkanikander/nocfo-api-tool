@@ -31,3 +31,6 @@ module Endpoints =
         paged (contactsBySlug slug) page
     let contactById (slug: string) (id: string) =
         $"/business/{seg slug}/contacts/{seg id}/"
+
+    let ledgerReport (slug: string) =
+        $"/business/{seg slug}/report/ledger/"
