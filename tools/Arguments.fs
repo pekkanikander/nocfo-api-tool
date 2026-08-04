@@ -70,6 +70,48 @@ type CreateEntitiesArgs =
             | Documents _  -> "Create documents from CSV input."
             | Businesses _ -> "Create businesses from CSV input."
 
+type BalanceArgs =
+    | [< AltCommandLine("-b"); Mandatory >]       BusinessId of string
+    | [< CustomCommandLine("--from"); Mandatory >] DateFrom of string
+    | [< CustomCommandLine("--to"); Mandatory >]  DateTo of string
+    | [< AltCommandLine("-a") >]                  Account of numbers: string list
+    | [< CustomCommandLine("--account-type") >]   AccountType of accountType: string
+    |                                             Daily
+    | [< AltCommandLine("-f") >]                  Fields of fields: string list
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | BusinessId _  -> "Business identifier (Y-tunnus|VAT-code)."
+            | DateFrom _    -> "First day of the period (YYYY-MM-DD)."
+            | DateTo _      -> "Last day of the period (YYYY-MM-DD)."
+            | Account _     -> "Account numbers to report (default: every account with entries)."
+            | AccountType _ -> "Account type to report, e.g. ASS or ASS_DEP; a prefix covers its subtypes."
+            | Daily         -> "Emit one closing balance per day instead of one row per entry."
+            | Fields _      -> "Comma-separated list of columns to emit (default: all)."
+
+type ReconcileArgs =
+    | [< AltCommandLine("-b") >]                  BusinessId of string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    | [< AltCommandLine("-a") >]                  Account of number: string
+    | [< Mandatory >]                             Left of source: string
+    | [< Mandatory >]                             Right of source: string
+    |                                             Charset of charset: string
+    |                                             Tolerance of amount: decimal
+    | [< AltCommandLine("-f") >]                  Fields of fields: string list
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | BusinessId _ -> "Business identifier (Y-tunnus|VAT-code); required by the 'ledger' source."
+            | DateFrom _   -> "First day of the period (YYYY-MM-DD); required by the 'ledger' source."
+            | DateTo _     -> "Last day of the period (YYYY-MM-DD); required by the 'ledger' source."
+            | Account _    -> "Account number the 'ledger' source reports on."
+            | Left _       -> "Left-hand source: 'ledger', 'nda:<path>[#<account>]' or 'csv:<path>'."
+            | Right _      -> "Right-hand source: 'ledger', 'nda:<path>[#<account>]' or 'csv:<path>'."
+            | Charset _    -> "Character set of a bank statement: auto (default), ascii-fi, latin1 or utf8."
+            | Tolerance _  -> "Largest difference still reported as 'ok' (default 0)."
+            | Fields _     -> "Comma-separated list of columns to emit (default: all)."
+
 [<RequireSubcommand>]
 type CliArgs =
     | [< AltCommandLine("-o"); Inherit >]         Out     of outPath: string
@@ -82,6 +124,8 @@ type CliArgs =
     | [< NoPrefix; SubCommand >]                  Delete  of ParseResults<EntitiesArgs>
     | [< NoPrefix; SubCommand >]                  Map     of ParseResults<MapEntitiesArgs>
     | [< NoPrefix; SubCommand >]                  Create  of ParseResults<CreateEntitiesArgs>
+    | [< NoPrefix; SubCommand >]                  Balance of ParseResults<BalanceArgs>
+    | [< NoPrefix; SubCommand >]                  Reconcile of ParseResults<ReconcileArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
@@ -95,3 +139,5 @@ type CliArgs =
             | Delete _     -> "Delete entities (accounts, etc.)."
             | Map _        -> "Map entities between source and target environments."
             | Create _     -> "Create entities from CSV input."
+            | Balance _    -> "Rolling balance of an account over a period."
+            | Reconcile _  -> "Compare the daily balances of two sources."

@@ -55,6 +55,12 @@ let private mapDomainErrorToExitCode (err: DomainError) =
         | NocfoClient.Http.HttpError.Timeout url ->
             eprintfn "Request timed out: %O" url
             ExitCodes.EX_UNAVAILABLE
+    | DomainError.Invalid message ->
+        eprintfn "%s" message
+        ExitCodes.EX_USAGE
+    | DomainError.BadData message ->
+        eprintfn "%s" message
+        ExitCodes.EX_DATAERR
     | DomainError.Unexpected message when message.StartsWith("No matching business:", StringComparison.Ordinal) ->
         eprintfn "%s" message
         ExitCodes.EX_NOINPUT
@@ -529,6 +535,143 @@ let create (toolContext: ToolContext) (args: ParseResults<CreateEntitiesArgs>) =
             | _ -> failwith "Unknown create entity type"
     }
 
+/// The account numbers a balance report covers. An empty set means every account in the report;
+/// `--account-type ASS` covers `ASS` and its `ASS_*` subtypes, which is how the chart of accounts
+/// is laid out. Account types come from the list rows, so this costs no extra hydration.
+let private selectedAccountNumbers (context: BusinessContext) (numbers: string list) (accountType: string option) =
+    async {
+        match accountType with
+        | None -> return Ok (Set.ofList numbers)
+        | Some wanted ->
+            let wanted = wanted.ToUpperInvariant()
+            let isWanted (row: AccountRow) =
+                match row.``type`` with
+                | Some accountType ->
+                    let name = string accountType
+                    name = wanted || name.StartsWith(wanted + "_", StringComparison.Ordinal)
+                | None -> false
+            let! byType =
+                Streams.streamAccountRows context
+                |> AsyncSeq.map (function
+                    | Ok row -> row
+                    | Error error -> raise (DomainStreamException error))
+                |> AsyncSeq.filter isWanted
+                |> AsyncSeq.map (fun row -> row.number)
+                |> AsyncSeq.toListAsync
+            match byType with
+            | [] -> return Error (DomainError.Invalid $"No account has type '{wanted}'.")
+            | _  -> return Ok (Set.ofList (numbers @ byType))
+    }
+
+let balance (toolContext: ToolContext) (args: ParseResults<BalanceArgs>) =
+    async {
+        let fields = args.GetResult(BalanceArgs.Fields, defaultValue = [])
+        let! businessContext = resolveBusinessContext toolContext.Accounting (args.GetResult BalanceArgs.BusinessId)
+        match businessContext with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok context ->
+
+        let! selection =
+            selectedAccountNumbers
+                context
+                (args.GetResult(BalanceArgs.Account, defaultValue = []))
+                (args.TryGetResult BalanceArgs.AccountType)
+        match selection with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok numbers ->
+
+        let! ledger =
+            Ledger.fetch context (args.GetResult BalanceArgs.DateFrom) (args.GetResult BalanceArgs.DateTo)
+        match ledger with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok ledger ->
+
+        let rows = Balance.rows numbers ledger
+        if not (args.Contains BalanceArgs.Daily) then
+            do!
+                AsyncSeq.ofSeq rows
+                |> Nocfo.Csv.writeCsvGeneric<BalanceRow> toolContext.Output (Some fields)
+                |> AsyncSeq.iter ignore
+            return ExitCodes.EX_OK
+        else
+            match rows |> List.map (fun row -> row.account_number) |> List.distinct with
+            | [] ->
+                eprintfn "No account in the ledger report matches the selection."
+                return ExitCodes.EX_DATAERR
+            | [ _ ] ->
+                do!
+                    AsyncSeq.ofSeq (Balance.dailyClosing rows)
+                    |> Nocfo.Csv.writeCsvGeneric<DailyBalanceRow> toolContext.Output (Some fields)
+                    |> AsyncSeq.iter ignore
+                return ExitCodes.EX_OK
+            | several ->
+                eprintfn "--daily reports one account at a time; the selection covers %s." (String.Join(", ", several))
+                return ExitCodes.EX_USAGE
+    }
+
+let private parseCharset (text: string option) =
+    match text with
+    | None | Some "auto" -> Ok Nocfo.TitoCharset.Auto
+    | Some "ascii-fi"    -> Ok Nocfo.TitoCharset.AsciiFi
+    | Some "latin1"      -> Ok Nocfo.TitoCharset.Latin1
+    | Some "utf8"        -> Ok Nocfo.TitoCharset.Utf8
+    | Some other ->
+        Error (DomainError.Invalid $"Unknown character set '{other}'. Expected auto, ascii-fi, latin1 or utf8.")
+
+let reconcile (toolContext: ToolContext) (args: ParseResults<ReconcileArgs>) =
+    async {
+        let fields = args.GetResult(ReconcileArgs.Fields, defaultValue = [])
+        let tolerance = args.GetResult(ReconcileArgs.Tolerance, defaultValue = 0M)
+
+        match BalanceSource.parse (args.GetResult ReconcileArgs.Left),
+              BalanceSource.parse (args.GetResult ReconcileArgs.Right),
+              parseCharset (args.TryGetResult ReconcileArgs.Charset) with
+        | Error error, _, _
+        | _, Error error, _
+        | _, _, Error error -> return mapDomainErrorToExitCode error
+        | Ok left, Ok right, Ok charset ->
+
+        let! businessContext =
+            match args.TryGetResult ReconcileArgs.BusinessId with
+            | Some businessId ->
+                resolveBusinessContext toolContext.Accounting businessId
+                |> NocfoClient.AsyncResult.map Some
+            | None -> async.Return (Ok None)
+        match businessContext with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok business ->
+
+        let query =
+            { dateFrom = args.TryGetResult ReconcileArgs.DateFrom
+              dateTo   = args.TryGetResult ReconcileArgs.DateTo
+              accounts = args.TryGetResult ReconcileArgs.Account |> Option.map Set.singleton |> Option.defaultValue Set.empty
+              charset  = charset }
+
+        let! leftRows  = BalanceSource.read business query left
+        let! rightRows = BalanceSource.read business query right
+        match leftRows, rightRows with
+        | Error error, _
+        | _, Error error -> return mapDomainErrorToExitCode error
+        | Ok leftRows, Ok rightRows ->
+
+        let differing = ref 0
+        let rows =
+            Reconcile.daily tolerance (AsyncSeq.ofSeq leftRows) (AsyncSeq.ofSeq rightRows)
+            |> AsyncSeq.map (fun row ->
+                if row.status = "differs" then differing.Value <- differing.Value + 1
+                row)
+        do!
+            rows
+            |> Nocfo.Csv.writeCsvGeneric<ReconcileRow> toolContext.Output (Some fields)
+            |> AsyncSeq.iter ignore
+
+        if differing.Value > 0 then
+            eprintfn "%d day(s) do not reconcile." differing.Value
+            return ExitCodes.EX_DATAERR
+        else
+            return ExitCodes.EX_OK
+    }
+
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =
         parser.ParseCommandLine(argv, raiseOnUsage = true)
@@ -560,6 +703,8 @@ let private run (parser: ArgumentParser<CliArgs>) argv =
     | CliArgs.Delete _ -> delete toolContext (results.GetResult Delete)
     | CliArgs.Map _    -> map    toolContext (results.GetResult Map)
     | CliArgs.Create _ -> create toolContext (results.GetResult Create)
+    | CliArgs.Balance _   -> balance   toolContext (results.GetResult CliArgs.Balance)
+    | CliArgs.Reconcile _ -> reconcile toolContext (results.GetResult CliArgs.Reconcile)
     | _ ->
         eprintfn "%s" (parser.PrintUsage())
         async.Return ExitCodes.EX_USAGE
