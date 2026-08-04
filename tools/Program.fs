@@ -100,26 +100,45 @@ let private getBusinessContext (toolContext: ToolContext) (args: ParseResults<Bu
         return businessContext
     }
 
-let private listEntitiesForBusiness<'Full, 'Partial>
+/// Writes the requested fields of a list response as CSV, hydrating each row only when the row
+/// type cannot answer the selection on its own. `AccountRow` lacks only `balance` and `is_used`,
+/// so `list accounts --fields "id,number,name,type"` costs ⌈N/100⌉ requests rather than
+/// ⌈N/100⌉ + N. Document and contact rows are already the full form, so they never hydrate.
+let writeEntitiesCsv<'Full, 'Row>
+    (output: TextWriter)
+    (fields: string list)
+    (hydrate: 'Row -> Async<Result<'Full, DomainError>>)
+    (rows: AsyncSeq<Result<'Row, DomainError>>)
+    : AsyncSeq<unit> =
+    let unwrap = function
+        | Ok entity -> entity
+        | Error error -> raise (DomainStreamException error)
+    if Nocfo.Csv.canSupplyFields<'Row> fields then
+        rows
+        |> AsyncSeq.map unwrap
+        |> Nocfo.Csv.writeCsvGeneric<'Row> output (Some fields)
+    else
+        rows
+        |> AsyncSeq.mapAsync (function
+            | Error error -> async.Return (Error error)
+            | Ok row -> hydrate row)
+        |> AsyncSeq.map unwrap
+        |> Nocfo.Csv.writeCsvGeneric<'Full> output (Some fields)
+
+let private listEntitiesForBusiness<'Full, 'Row>
     (toolContext: ToolContext)
     (args: ParseResults<BusinessScopedArgs>)
     (fields: string list)
-    (streamEntities: BusinessContext -> AsyncSeq<Result<Hydratable<'Full, 'Partial>, DomainError>>)
-    (hydrateFailureLabel: string) =
+    (streamRows: BusinessContext -> AsyncSeq<Result<'Row, DomainError>>)
+    (hydrate: BusinessContext -> 'Row -> Async<Result<'Full, DomainError>>) =
     async {
-        let output = toolContext.Output
         let! businessContext = getBusinessContext toolContext args
         match businessContext with
         | Ok businessContext ->
-            let rows =
-                streamEntities businessContext
-                |> Streams.hydrateAndUnwrap
-                |> AsyncSeq.map (function
-                    | Ok entity -> entity
-                    | Error error -> raise (DomainStreamException error))
-            let writeCsv =
-                Nocfo.Csv.writeCsvGeneric<'Full> output (Some fields) rows
-            do! writeCsv |> AsyncSeq.iter ignore
+            do!
+                streamRows businessContext
+                |> writeEntitiesCsv<'Full, 'Row> toolContext.Output fields (hydrate businessContext)
+                |> AsyncSeq.iter ignore
             return 0
         | Error error ->
             return mapDomainErrorToExitCode error
@@ -130,24 +149,24 @@ let listAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedAr
         toolContext
         args
         fields
-        Streams.streamAccounts
-        "account"
+        Streams.streamAccountRows
+        (fun context row -> Account.fetchFull context row.id)
 
 let listDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
     listEntitiesForBusiness<DocumentFull, DocumentRow>
         toolContext
         args
         fields
-        Streams.streamDocuments
-        "document"
+        Streams.streamDocumentRows
+        (fun _ row -> async.Return (Ok row))
 
 let listContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
     listEntitiesForBusiness<ContactFull, ContactRow>
         toolContext
         args
         fields
-        Streams.streamContacts
-        "contact"
+        Streams.streamContactRows
+        (fun _ row -> async.Return (Ok row))
 
 let private foldCommandResults (printOk: 'Result -> unit) (results: AsyncSeq<Result<'Result, DomainError>>) : Async<int> =
     async {
@@ -326,9 +345,9 @@ let private getSourceAccounting (cfg: ToolConfig) (verbose: bool) =
 /// document the order it lists accounts in, and an ordered merge silently drops rows
 /// whenever the two orders disagree (e.g. `999` against `1000`).
 let mapAccountRows
-    (sourceAccounts: AsyncSeq<Result<AccountFull, DomainError>>)
-    (targetAccounts: AsyncSeq<Result<AccountFull, DomainError>>)
-    : Async<Result<Mapping.IDMap list * AccountFull list, DomainError>> =
+    (sourceAccounts: AsyncSeq<Result<AccountRow, DomainError>>)
+    (targetAccounts: AsyncSeq<Result<AccountRow, DomainError>>)
+    : Async<Result<Mapping.IDMap list * AccountRow list, DomainError>> =
 
     let collect folder initial (stream: AsyncSeq<Result<'T, DomainError>>) =
         stream
@@ -342,14 +361,14 @@ let mapAccountRows
     async {
         let! targetIndex =
             targetAccounts
-            |> collect (fun index (target: AccountFull) -> Map.add target.number target index) Map.empty
+            |> collect (fun index (target: AccountRow) -> Map.add target.number target index) Map.empty
 
         match targetIndex with
         | Error err -> return Error err
         | Ok index ->
             let! paired =
                 sourceAccounts
-                |> collect (fun (rows, missing) (source: AccountFull) ->
+                |> collect (fun (rows, missing) (source: AccountRow) ->
                     match Map.tryFind source.number index with
                     | Some target ->
                         ({ source_id = source.id
@@ -379,15 +398,11 @@ let mapAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArg
                 eprintfn "Failed to resolve business context: %A" err
                 return mapDomainErrorToExitCode err
             | Ok sourceContext, Ok targetContext ->
-                let sourceAccounts =
-                    Streams.streamAccounts sourceContext
-                    |> Streams.hydrateAndUnwrap
-
-                let targetAccounts =
-                    Streams.streamAccounts targetContext
-                    |> Streams.hydrateAndUnwrap
-
-                let! paired = mapAccountRows sourceAccounts targetAccounts
+                // Only `id` and `number` are needed, and the list rows carry both.
+                let! paired =
+                    mapAccountRows
+                        (Streams.streamAccountRows sourceContext)
+                        (Streams.streamAccountRows targetContext)
 
                 match paired with
                 | Error err ->

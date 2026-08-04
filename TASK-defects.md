@@ -202,7 +202,7 @@ before it can start work, defeating the repo's central "never buffer" rule.
 
 ---
 
-## D6 — `list accounts` performs one HTTP request per account for nothing
+## D6 — `list accounts` performs one HTTP request per account for nothing — **FIXED**
 
 **Severity: medium.** [Domain.fs:519](hawaii-client/src/Domain.fs#L519),
 [Program.fs:64](tools/Program.fs#L64)
@@ -217,6 +217,26 @@ fields it already has.
 known at that point (`fields: string list`), so the test is a set difference between the requested
 names and `typeof<AccountRow>`'s properties. This also removes the reason `list accounts` is slow
 enough to notice on a real chart of accounts.
+
+**Fixed** by asking the CSV layer rather than reimplementing the field test: `Csv.canSupplyFields<'T>`
+answers whether `writeCsvGeneric<'T>` could serve a selection from `'T` alone, which is exactly the
+condition for skipping hydration — and it cannot drift from what the writer actually accepts. An
+empty selection means "every field of the full form", so it hydrates.
+
+`Program.writeEntitiesCsv<'Full, 'Row>` picks the branch, writing `'Row` records directly on the
+fast path and `'Full` records otherwise. The three `Streams.stream*` functions now sit on top of
+`streamAccountRows` / `streamDocumentRows` / `streamContactRows`, so an un-hydrated stream is
+available to any caller. `map accounts` takes it too: it only ever read `id` and `number`, and was
+paying N requests per environment for them.
+
+Measured against api-tst on a 47-account chart:
+
+| command | requests before | after |
+| --- | --- | --- |
+| `list accounts --fields "id,number,name,type"` | 49 | **2** |
+| `list accounts --fields "id,number,balance"` | 49 | 49 |
+
+Covered by three cases in `tests/MapAccountsTests.fs` counting hydration calls.
 
 ---
 

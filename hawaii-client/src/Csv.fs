@@ -208,6 +208,13 @@ module Csv =
         | Error missing ->
             missing
 
+  /// Whether `writeCsvGeneric<'T>` can satisfy this field selection out of 'T alone.
+  /// An empty selection means "every field of 'T", which no narrower type can stand in for.
+  let canSupplyFields<'T> (fields: string list) : bool =
+    match fields with
+    | [] -> false
+    | xs -> buildClassMapForFields<'T> xs |> Result.isOk
+
   let writeCsvGeneric<'T>
       (tw: TextWriter)
       (fields: string list option)

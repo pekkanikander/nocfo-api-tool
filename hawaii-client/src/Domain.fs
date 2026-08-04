@@ -657,27 +657,38 @@ module Streams =
        (fun page -> Endpoints.businessList page)
     |> toDomain Business.ofRaw
 
-  /// Domain-level stream of accounts for a given business, yielding lazy Partials
-  /// that can be hydrated to Full on demand
-  let streamAccounts (context: BusinessContext) : AsyncSeq<Result<Account, DomainError>> =
+  /// The rows a paginated list endpoint yields, before any hydration. A caller that only needs
+  /// fields the row type already carries can consume these directly and pay no per-row request.
+  let streamAccountRows (context: BusinessContext) : AsyncSeq<Result<AccountRow, DomainError>> =
     Streams.streamPaginated<PaginatedAccountListList, NocfoApi.Types.AccountList>
        context.ctx.http
        (fun page -> Endpoints.accountsBySlugPage context.key.slug page)
-    |> toDomain (Account.ofRow context)
+    |> toDomain id
 
-  /// Domain-level stream of documents for a given business.
-  let streamDocuments (context: BusinessContext) : AsyncSeq<Result<Document, DomainError>> =
+  let streamDocumentRows (context: BusinessContext) : AsyncSeq<Result<DocumentRow, DomainError>> =
     Streams.streamPaginated<PaginatedDocumentListList, DocumentFull>
        context.ctx.http
        (fun page -> Endpoints.documentsBySlugPage context.key.slug page)
-    |> toDomain Document.ofRaw
+    |> toDomain id
 
-  /// Domain-level stream of contacts for a given business.
-  let streamContacts (context: BusinessContext) : AsyncSeq<Result<Contact, DomainError>> =
+  let streamContactRows (context: BusinessContext) : AsyncSeq<Result<ContactRow, DomainError>> =
     Streams.streamPaginated<PaginatedContactList, ContactFull>
        context.ctx.http
        (fun page -> Endpoints.contactsBySlugPage context.key.slug page)
-    |> toDomain Contact.ofRaw
+    |> toDomain id
+
+  /// Domain-level stream of accounts for a given business, yielding lazy Partials
+  /// that can be hydrated to Full on demand
+  let streamAccounts (context: BusinessContext) : AsyncSeq<Result<Account, DomainError>> =
+    streamAccountRows context |> AsyncSeq.map (Result.map (Account.ofRow context))
+
+  /// Domain-level stream of documents for a given business.
+  let streamDocuments (context: BusinessContext) : AsyncSeq<Result<Document, DomainError>> =
+    streamDocumentRows context |> AsyncSeq.map (Result.map Document.ofRaw)
+
+  /// Domain-level stream of contacts for a given business.
+  let streamContacts (context: BusinessContext) : AsyncSeq<Result<Contact, DomainError>> =
+    streamContactRows context |> AsyncSeq.map (Result.map Contact.ofRaw)
 
 
   let hydrateAndUnwrap<'Full, 'Partial>
