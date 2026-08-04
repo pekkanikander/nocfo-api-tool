@@ -410,7 +410,24 @@ module Csv =
       let optValue = FSharpValue.MakeUnion(someCase, [| innerValueObj |], true)
       Some optValue
 
-  let private buildRecordFromCsv<'T> (csv: CsvReader) (fieldsInfo: PropertyInfo[]) (columnIndexPerField: int option[]) (defaults: obj[]) =
+  /// The value an empty cell writes into an optional patch field, meaning "clear this".
+  /// Only a type with an unambiguous empty value can say that; for the rest, treating an
+  /// empty cell as a silent no-op is what made D11 invisible, so it is reported instead.
+  let private clearedOptionValue (fieldName: string) (ft: Type) : obj =
+    let innerType = ft.GetGenericArguments().[0]
+    if innerType <> typeof<string> then
+      raise (CsvFormatException (sprintf "Column '%s' is empty, which means 'clear this field', but a value of type %s cannot be cleared. Drop the column to leave the field unchanged."
+        fieldName
+        innerType.FullName))
+    let someCase =
+      FSharpType.GetUnionCases(ft, true)
+      |> Array.find (fun c -> c.Name = "Some")
+    FSharpValue.MakeUnion(someCase, [| box "" |], true)
+
+  /// `emptyClears` distinguishes the two readers: in a PATCH the columns present are exactly
+  /// the fields the caller is speaking about, so an empty cell clears; elsewhere a record is
+  /// being built from scratch and an empty cell simply supplies nothing.
+  let private buildRecordFromCsv<'T> (emptyClears: bool) (csv: CsvReader) (fieldsInfo: PropertyInfo[]) (columnIndexPerField: int option[]) (defaults: obj[]) =
     let values = Array.copy defaults
     for i = 0 to fieldsInfo.Length - 1 do
       match columnIndexPerField.[i] with
@@ -421,7 +438,7 @@ module Csv =
           if isOptionType ft then
             match setOptionFieldValue csv colIndex ft with
             | Some optValue -> values.[i] <- optValue
-            | None -> ()
+            | None -> if emptyClears then values.[i] <- clearedOptionValue fi.Name ft
           elif isStringCollectionType ft then
             match setCollectionFieldValue csv fi.Name ft colIndex with
             | Some collValue -> values.[i] <- collValue
@@ -465,7 +482,7 @@ module Csv =
             collectRecordMetadata t csv.HeaderRecord fields
 
           while csv.Read() do
-            let values = buildRecordFromCsv<'T> csv recordFieldInfos fieldColumnIndex fieldDefaults
+            let values = buildRecordFromCsv<'T> false csv recordFieldInfos fieldColumnIndex fieldDefaults
             yield (FSharpValue.MakeRecord(t, values, true) :?> 'T)
       finally
         dispose ()
@@ -505,7 +522,7 @@ module Csv =
 
           while csv.Read() do
             let keyValue = csv.GetField(typeof<'TKey>, keyColumnIndex) :?> 'TKey
-            let patchValues = buildRecordFromCsv<'TPatch> csv patchFieldInfos patchFieldColumns patchDefaults
+            let patchValues = buildRecordFromCsv<'TPatch> true csv patchFieldInfos patchFieldColumns patchDefaults
             let patch = FSharpValue.MakeRecord(patchType, patchValues, true)
             let delta = mkDelta keyValue (patch :?> 'TPatch)
             yield delta

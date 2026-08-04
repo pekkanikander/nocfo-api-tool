@@ -123,6 +123,8 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
 - `--dry-run` prints what mutations would be sent without executing them.
 - `--fields` controls both which columns are emitted and which columns are read back.
   `id` is always required when executing updates or deletes.
+- On an update, a column the CSV carries is applied to every row it lists, so an empty cell
+  clears that field. Leave a field alone by dropping its column, and a row alone by omitting it.
 - Output defaults to stdout and input defaults to stdin;
   `--out`/`--in` override those streams without shell redirection.
 - Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,

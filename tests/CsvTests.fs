@@ -184,3 +184,31 @@ let ``parseCsvJsonElement: array literal parses as JSON array`` () =
     let e = parseCsvJsonElement """[true]"""
     let kind = e.ValueKind
     test <@ kind = JsonValueKind.Array @>
+
+// ── Delta reading: an empty cell clears the field (D11) ───────────────────────
+
+let private readAccountDeltas (fields: string list option) (csv: string) : Nocfo.Domain.AccountDelta list =
+    use reader = new StringReader(csv)
+    Csv.readDeltas<Nocfo.Domain.AccountDelta, int, NocfoApi.Types.PatchedAccountRequest> "id" reader fields
+    |> AsyncSeq.toListSynchronously
+
+[<Fact>]
+let ``An empty cell in a column the CSV carries clears the field`` () =
+    let deltas = readAccountDeltas (Some ["id"; "description"]) "id,description\n7,\n"
+    let result = deltas |> List.map (fun d -> d.id, d.patch.description)
+    test <@ result = [ 7, Some "" ] @>
+
+[<Fact>]
+let ``A column the CSV does not carry leaves the field unchanged`` () =
+    let deltas = readAccountDeltas (Some ["id"; "number"]) "id,number\n7,1500\n"
+    let result = deltas |> List.map (fun d -> d.patch.number, d.patch.description)
+    test <@ result = [ Some "1500", None ] @>
+
+[<Fact>]
+let ``An empty cell in a column that has no empty value is rejected`` () =
+    let message =
+        try
+            readAccountDeltas (Some ["id"; "opening_balance"]) "id,opening_balance\n7,\n" |> ignore
+            None
+        with CsvFormatException message -> Some message
+    test <@ message |> Option.map (fun m -> m.Contains "opening_balance") = Some true @>

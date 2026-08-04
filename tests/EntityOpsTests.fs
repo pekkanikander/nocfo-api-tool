@@ -195,3 +195,31 @@ let ``executeDeltaUpdates fetches diffs patches and wraps the updated entity`` (
 
     test <@ patchRequests = 1 @>
     test <@ results = [ Ok "9999" ] @>
+
+[<Fact>]
+let ``A cleared field reaches the API, and rows absent from the CSV do not`` () =
+    let full = { makeAccount 5 "Revenue" "1000" with description = Some "note" }
+    let delta = AccountDelta.Create(5, { emptyPatch with description = Some "" })
+    let mutable patched = []
+    let mutable fetched = []
+
+    let handler =
+        new StubHandler(fun request ->
+            patched <- (request.RequestUri.AbsolutePath, request.Content.ReadAsStringAsync().Result) :: patched
+            jsonResponse HttpStatusCode.OK (Serializer.serialize full))
+
+    let context = businessContext false handler
+    EntityOps.executeDeltaUpdates
+        (fun slug id -> $"/businesses/{slug}/accounts/{id}")
+        (fun (account: AccountFull) -> account.number)
+        context
+        (fun _ id -> async { fetched <- id :: fetched; return Ok full })
+        (EntityOps.diffToPatch "account" (fun (a: AccountFull) -> a.id) (fun (d: AccountDelta) -> d.id) (fun d -> d.patch))
+        (fun (d: AccountDelta) -> d.id)
+        (AsyncSeq.singleton (Ok delta))
+    |> AsyncSeq.toListSynchronously
+    |> ignore
+
+    test <@ fetched = [ 5 ] @>
+    test <@ patched |> List.map fst = [ "/v1/businesses/acme/accounts/5" ] @>
+    test <@ patched |> List.forall (fun (_, body) -> body.Contains "\"description\":\"\"") @>

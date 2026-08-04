@@ -303,7 +303,7 @@ introduces (`date_from`, `date_to`, `account`).
 
 ---
 
-## D11 — An empty CSV cell cannot clear a field, and says nothing about it
+## D11 — An empty CSV cell cannot clear a field, and says nothing about it — **FIXED**
 
 **Severity: low-medium.** `hawaii-client/src/Csv.fs`, `hawaii-client/src/PatchShape.fs`
 
@@ -324,6 +324,21 @@ Two defensible readings, and the choice is a design decision rather than an obvi
 - **Empty means "clear"**, with absence of the column meaning "leave unchanged". More expressive,
   and `--fields` already distinguishes the two cases, but it makes a truncated or half-filled CSV
   destructive.
+
+**Resolved** as the second reading. In a PATCH the columns present are exactly the fields the
+caller is speaking about, so within those columns an empty cell clears; a column the CSV does not
+carry leaves the field alone, and a row the CSV does not list is never fetched, let alone written.
+The rule applies only to the delta reader — `readCsvGeneric`, which feeds `create`, still treats an
+empty cell as "nothing supplied", since there is nothing there to clear.
+
+Clearing is expressed as the empty string, which is what the API stores for a blank text field.
+Types with no empty value (`opening_balance`, the enums, `name_translations`) cannot be cleared this
+way, so an empty cell in one of their columns is now a `CsvFormatException` naming the column rather
+than the silent no-op that hid this defect.
+
+Verified against api-tst: `update accounts --fields "id,description"` fed `616870,` clears the
+description. Covered by three cases in `tests/CsvTests.fs` and one in `tests/EntityOpsTests.fs`
+asserting the `PATCH` body carries `"description":""`.
 
 ---
 

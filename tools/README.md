@@ -120,7 +120,9 @@ Still unimplemented:
 - `id` is always required when reading updates or deletes; if `--fields` is present, the CSV header still has to include it.
 - Update rows are handled one CSV row at a time: the CLI fetches the current server-side entity by `id`, normalizes the requested patch against that fresh value, and only then issues a PATCH when something changed.
 - Repeated `id` values in update CSV input are allowed. They are processed sequentially, so a later row sees the result of earlier successful PATCHes for the same `id`.
-- Collections of strings are stored as `;`-separated lists. `option<_>` values use empty cells for `None`.
+- Collections of strings are stored as `;`-separated lists. On output, `option<_>` values use empty cells for `None`.
+- On update, an empty cell means "clear this field" — the columns the CSV carries are exactly the fields the caller is speaking about. Leave a field unchanged by dropping its column, and a row untouched by omitting the row. Only fields with an empty value (text) can be cleared this way; an empty cell in any other column is rejected rather than ignored.
+- On create, an empty cell simply supplies nothing, since there is no prior value to clear.
 - Extra columns in the input are ignored when `--fields` is present; otherwise we validate that every header maps to a property.
 
 Use `--out`/`--in` if you prefer explicit file paths over shell redirection.
