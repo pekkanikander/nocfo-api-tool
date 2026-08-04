@@ -26,5 +26,6 @@
     <Compile Include="EntityOpsTests.fs" />
     <Compile Include="CsvTests.fs" />
     <Compile Include="BlueprintJsonTests.fs" />
+    <Compile Include="ExitCodeTests.fs" />
   </ItemGroup>
 </Project>

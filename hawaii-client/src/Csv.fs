@@ -13,6 +13,9 @@ open System.Text.Json
 open Nocfo.CsvHelpers
 open Nocfo.JsonHelpers
 
+/// The CSV file or the `--fields` selection does not match the expected shape.
+exception CsvFormatException of message: string
+
 module private CsvFieldMapping =
   let normalizeFields (fields: string list) : string list =
     fields
@@ -90,9 +93,9 @@ module private CsvHeaderValidation =
           |> Set.toList
 
         if not unknown.IsEmpty then
-          failwithf "Unknown column(s) for %s: %s"
+          raise (CsvFormatException (sprintf "Unknown column(s) for %s: %s"
             t.FullName
-            (String.Join(", ", unknown))
+            (String.Join(", ", unknown))))
 
     | wanted ->
         let wantedCI =
@@ -104,9 +107,9 @@ module private CsvHeaderValidation =
           |> List.filter (fun w -> not (headerNames.Contains w))
 
         if not missing.IsEmpty then
-          failwithf "CSV is missing required column(s) for %s: %s"
+          raise (CsvFormatException (sprintf "CSV is missing required column(s) for %s: %s"
             typeof<'T>.FullName
-            (String.Join(", ", missing))
+            (String.Join(", ", missing))))
 
   let validateDeltaHeader<'TPatch> (keyColumn: string) (header: string[]) (fields: string list option) : unit =
     let headerNames =
@@ -133,14 +136,14 @@ module private CsvHeaderValidation =
       |> List.distinct
 
     if not unknownRequested.IsEmpty then
-      failwithf "Unknown field(s) for %s: %s"
+      raise (CsvFormatException (sprintf "Unknown field(s) for %s: %s"
         typeof<'TPatch>.FullName
-        (String.Join(", ", unknownRequested))
+        (String.Join(", ", unknownRequested))))
 
     match requested with
     | [] ->
         if not (headerNames.Contains normalizedKeyColumn) then
-          failwithf "CSV is missing required column(s) for %s: %s" typeof<'TPatch>.FullName normalizedKeyColumn
+          raise (CsvFormatException (sprintf "CSV is missing required column(s) for %s: %s" typeof<'TPatch>.FullName normalizedKeyColumn))
 
         let unknown =
           headerNames
@@ -148,9 +151,9 @@ module private CsvHeaderValidation =
           |> Set.toList
 
         if not unknown.IsEmpty then
-          failwithf "Unknown column(s) for %s: %s"
+          raise (CsvFormatException (sprintf "Unknown column(s) for %s: %s"
             typeof<'TPatch>.FullName
-            (String.Join(", ", unknown))
+            (String.Join(", ", unknown))))
 
     | wanted ->
         let required =
@@ -161,9 +164,9 @@ module private CsvHeaderValidation =
           |> List.filter (fun name -> not (headerNames.Contains name))
 
         if not missing.IsEmpty then
-          failwithf "CSV is missing required column(s) for %s: %s"
+          raise (CsvFormatException (sprintf "CSV is missing required column(s) for %s: %s"
             typeof<'TPatch>.FullName
-            (String.Join(", ", missing))
+            (String.Join(", ", missing))))
 
 module Csv =
   open CsvFieldMapping
@@ -217,9 +220,9 @@ module Csv =
     let missing = tryRegisterFieldsMap<'T> csv.Context fields
     match missing with
     | (_::_ as miss) ->
-        failwithf "Unknown field(s) for %s: %s"
+        raise (CsvFormatException (sprintf "Unknown field(s) for %s: %s"
           typeof<'T>.FullName
-          (String.Join(", ", miss))
+          (String.Join(", ", miss))))
     | _ -> ()
 
     let mutable disposed = false
@@ -488,7 +491,7 @@ module Csv =
 
           let keyColumnIndex =
             tryFindColumnIndex keyColumn csv.HeaderRecord
-            |> Option.defaultWith (fun () -> failwithf "CSV is missing required column '%s' for %s." keyColumn typeof<'TDelta>.FullName)
+            |> Option.defaultWith (fun () -> raise (CsvFormatException (sprintf "CSV is missing required column '%s' for %s." keyColumn typeof<'TDelta>.FullName)))
 
           let patchFieldInfos, patchFieldColumns, patchDefaults =
             collectRecordMetadata patchType csv.HeaderRecord fields

@@ -8,7 +8,7 @@ Ordered by severity. D1–D3 are the ones that bite a user today.
 
 ---
 
-## D1 — Every failure path except configuration aborts with SIGABRT (exit 134)
+## D1 — Every failure path except configuration aborts with SIGABRT (exit 134) — **FIXED**
 
 **Severity: high.** `tools/Program.fs`
 
@@ -50,6 +50,20 @@ sysexits codes, but it is only reachable from `map accounts`.
 3. Parse with `raiseOnUsage = true` (or check `results.IsUsageRequested` explicitly) so
    `nocfo --help` still exits 0 while a missing subcommand exits non-zero.
 4. Open the `--out` file inside the `try`, and `use` it so it is flushed and closed deterministically.
+
+**Fixed**: `main` is now `try run parser argv with ex -> exitCodeForException ex`. The stream code
+raises `DomainStreamException` instead of `failwithf`; `Csv.fs` raises a new `CsvFormatException`
+for header and `--fields` errors (the two remaining `failwithf` there are genuine programmer errors
+and still map to `EX_SOFTWARE`); business-context failures go through `mapDomainErrorToExitCode`
+rather than `return 1`; parsing uses `raiseOnUsage = true` so `--help` prints usage and exits 0
+while a missing or unrecognised subcommand exits 64; `--in`/`--out` are `use`-bound, which also
+fixes `-o` silently truncating its output because the `StreamWriter` was never flushed.
+Verified end to end: `--help` 0, no subcommand 64, unknown `--fields` 65, missing input 66,
+connection refused 69, bad token 77, missing token 78 — no stack traces.
+Covered by `tests/ExitCodeTests.fs`.
+
+Not addressed here: `writeCsvGeneric` still emits the CSV header to stdout before the first row is
+fetched, so a failing `list` prints a header and then the error.
 
 ---
 

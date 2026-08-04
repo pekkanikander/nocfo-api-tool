@@ -77,14 +77,14 @@ let ``Optional field Some survives round-trip`` () =
 [<Fact>]
 let ``Unknown column in CSV raises exception`` () =
     let csv = "id,name,note,bogus\n1,Alice,,\n"
-    Assert.Throws<exn>(fun () ->
+    Assert.Throws<Nocfo.CsvFormatException>(fun () ->
         readFromCsv None csv |> ignore)
     |> ignore
 
 [<Fact>]
 let ``Missing required column in field selection raises exception`` () =
     // Requesting a field that does not exist on the type
-    Assert.Throws<exn>(fun () ->
+    Assert.Throws<Nocfo.CsvFormatException>(fun () ->
         writeToCsv (Some ["id"; "nonexistent"]) [] |> ignore)
     |> ignore
 

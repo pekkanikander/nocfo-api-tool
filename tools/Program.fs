@@ -11,6 +11,8 @@ module ExitCodes =
     [<Literal>]
     let EX_OK = 0
     [<Literal>]
+    let EX_USAGE = 64
+    [<Literal>]
     let EX_DATAERR = 65
     [<Literal>]
     let EX_NOINPUT = 66
@@ -21,7 +23,44 @@ module ExitCodes =
     [<Literal>]
     let EX_SOFTWARE = 70
     [<Literal>]
+    let EX_CANTCREAT = 73
+    [<Literal>]
     let EX_CONFIG = 78
+
+let private mapDomainErrorToExitCode (err: DomainError) =
+    match err with
+    | DomainError.Http httpErr ->
+        match httpErr with
+        | NocfoClient.Http.HttpError.Unauthorized url ->
+            eprintfn "Authentication failed (401 %O). Check your NOCFO_TOKEN." url
+            ExitCodes.EX_NOPERM
+        | NocfoClient.Http.HttpError.NotFound url ->
+            eprintfn "Resource not found (404 %O)." url
+            ExitCodes.EX_NOINPUT
+        | NocfoClient.Http.HttpError.RateLimited (url, _) ->
+            eprintfn "Rate limit exceeded after retries (%O)." url
+            ExitCodes.EX_UNAVAILABLE
+        | NocfoClient.Http.HttpError.ServerError (url, code, body) ->
+            eprintfn "Server error %A at %O: %s" code url (body.Substring(0, min 200 body.Length))
+            ExitCodes.EX_UNAVAILABLE
+        | NocfoClient.Http.HttpError.ClientError (url, code, body) ->
+            eprintfn "Request error %A at %O: %s" code url (body.Substring(0, min 200 body.Length))
+            ExitCodes.EX_UNAVAILABLE
+        | NocfoClient.Http.HttpError.ParseError (url, message) ->
+            eprintfn "Unexpected API response at %O: %s" url message
+            ExitCodes.EX_SOFTWARE
+        | NocfoClient.Http.HttpError.Transport (url, message) ->
+            eprintfn "Cannot reach %O: %s" url message
+            ExitCodes.EX_UNAVAILABLE
+        | NocfoClient.Http.HttpError.Timeout url ->
+            eprintfn "Request timed out: %O" url
+            ExitCodes.EX_UNAVAILABLE
+    | DomainError.Unexpected message when message.StartsWith("No matching business:", StringComparison.Ordinal) ->
+        eprintfn "%s" message
+        ExitCodes.EX_NOINPUT
+    | DomainError.Unexpected message ->
+        eprintfn "Unexpected error: %s" message
+        ExitCodes.EX_SOFTWARE
 
 let handleEntitiesArgs (args: ParseResults<EntitiesArgs>) =
     let entityTypeAndArgs = args.GetSubCommand()
@@ -47,7 +86,7 @@ let listBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs
             |> Streams.hydrateAndUnwrap
             |> AsyncSeq.map (function
                 | Ok business -> business.raw
-                | Error error -> failwithf "Failed to get business: %A" error)
+                | Error error -> raise (DomainStreamException error))
         let writeCsv =
             Nocfo.Csv.writeCsvGeneric<NocfoApi.Types.Business> output (Some fields) rows
         do! writeCsv |> AsyncSeq.iter ignore
@@ -77,14 +116,13 @@ let private listEntitiesForBusiness<'Full, 'Partial>
                 |> Streams.hydrateAndUnwrap
                 |> AsyncSeq.map (function
                     | Ok entity -> entity
-                    | Error error -> failwithf "Failed to hydrate %s: %A" hydrateFailureLabel error)
+                    | Error error -> raise (DomainStreamException error))
             let writeCsv =
                 Nocfo.Csv.writeCsvGeneric<'Full> output (Some fields) rows
             do! writeCsv |> AsyncSeq.iter ignore
             return 0
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
     }
 
 let listAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
@@ -174,8 +212,7 @@ let updateAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
                 Account.executeDeltaUpdates ctx csvStream
                 |> foldAccountCommandResults
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
     }
 
 let updateContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
@@ -192,8 +229,7 @@ let updateContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
                 Contact.executeDeltaUpdates ctx csvStream
                 |> foldContactCommandResults
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
     }
 
 let updateDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
@@ -209,8 +245,7 @@ let updateDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScope
                 Document.executeDeltaUpdates ctx csvStream
                 |> foldDocumentCommandResults
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
     }
 
 let private deleteEntities<'Command, 'Result>
@@ -229,8 +264,7 @@ let private deleteEntities<'Command, 'Result>
         | Ok ctx ->
             return! csvStream |> execute ctx |> foldResults
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
     }
 
 let deleteAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
@@ -277,41 +311,6 @@ let delete (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Documents args -> deleteDocuments toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
-
-let private mapDomainErrorToExitCode (err: DomainError) =
-    match err with
-    | DomainError.Http httpErr ->
-        match httpErr with
-        | NocfoClient.Http.HttpError.Unauthorized url ->
-            eprintfn "Authentication failed (401 %O). Check your NOCFO_TOKEN." url
-            ExitCodes.EX_NOPERM
-        | NocfoClient.Http.HttpError.NotFound url ->
-            eprintfn "Resource not found (404 %O)." url
-            ExitCodes.EX_NOINPUT
-        | NocfoClient.Http.HttpError.RateLimited (url, _) ->
-            eprintfn "Rate limit exceeded after retries (%O)." url
-            ExitCodes.EX_UNAVAILABLE
-        | NocfoClient.Http.HttpError.ServerError (url, code, body) ->
-            eprintfn "Server error %A at %O: %s" code url (body.Substring(0, min 200 body.Length))
-            ExitCodes.EX_UNAVAILABLE
-        | NocfoClient.Http.HttpError.ClientError (url, code, body) ->
-            eprintfn "Request error %A at %O: %s" code url (body.Substring(0, min 200 body.Length))
-            ExitCodes.EX_UNAVAILABLE
-        | NocfoClient.Http.HttpError.ParseError (url, message) ->
-            eprintfn "Unexpected API response at %O: %s" url message
-            ExitCodes.EX_SOFTWARE
-        | NocfoClient.Http.HttpError.Transport (url, message) ->
-            eprintfn "Cannot reach %O: %s" url message
-            ExitCodes.EX_UNAVAILABLE
-        | NocfoClient.Http.HttpError.Timeout url ->
-            eprintfn "Request timed out: %O" url
-            ExitCodes.EX_UNAVAILABLE
-    | DomainError.Unexpected message when message.StartsWith("No matching business:", StringComparison.Ordinal) ->
-        eprintfn "%s" message
-        ExitCodes.EX_NOINPUT
-    | DomainError.Unexpected message ->
-        eprintfn "Unexpected error: %s" message
-        ExitCodes.EX_SOFTWARE
 
 type private MapAccountsOutcome =
     | Mapped of Mapping.IDMap
@@ -425,8 +424,7 @@ let createAccounts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
         let! businessContext = getBusinessContext toolContext args
         match businessContext with
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
         | Ok ctx ->
             let commands =
                 Nocfo.Csv.readCsvGeneric<AccountCreatePayload> toolContext.Input (Some fields)
@@ -442,8 +440,7 @@ let createContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
         let! businessContext = getBusinessContext toolContext args
         match businessContext with
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
         | Ok ctx ->
             let commands =
                 Nocfo.Csv.readCsvGeneric<ContactCreatePayload> toolContext.Input (Some fields)
@@ -472,8 +469,7 @@ let createDocuments (toolContext: ToolContext) (args: ParseResults<DocumentCreat
         let! businessContext = resolveBusinessContext toolContext.Accounting businessId
         match businessContext with
         | Error error ->
-            eprintfn "Failed to get business context: %A" error
-            return 1
+            return mapDomainErrorToExitCode error
         | Ok ctx ->
             let! accountIdMap =
                 match args.TryGetResult DocumentCreateArgs.AccountIdMap with
@@ -510,42 +506,75 @@ let create (toolContext: ToolContext) (args: ParseResults<CreateEntitiesArgs>) =
             | _ -> failwith "Unknown create entity type"
     }
 
+let private run (parser: ArgumentParser<CliArgs>) argv =
+    let results: ParseResults<CliArgs> =
+        parser.ParseCommandLine(argv, raiseOnUsage = true)
+
+    match results.TryGetSubCommand() with
+    | None ->
+        eprintfn "%s" (parser.PrintUsage())
+        ExitCodes.EX_USAGE
+    | Some subcommand ->
+
+    use input : TextReader =
+        match results.TryGetResult CliArgs.In with
+        | Some path -> upcast new StreamReader(path)
+        | None -> Console.In
+
+    use output : TextWriter =
+        match results.TryGetResult CliArgs.Out with
+        | Some path -> upcast new StreamWriter(path)
+        | None -> Console.Out
+
+    let dryRun  = results.Contains(CliArgs.DryRun)
+    let verbose = results.Contains(CliArgs.Verbose)
+    let profile = results.TryGetResult CliArgs.Profile
+    let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
+
+    match subcommand with
+    | CliArgs.List _   -> list   toolContext (results.GetResult List)
+    | CliArgs.Update _ -> update toolContext (results.GetResult Update)
+    | CliArgs.Delete _ -> delete toolContext (results.GetResult Delete)
+    | CliArgs.Map _    -> map    toolContext (results.GetResult Map)
+    | CliArgs.Create _ -> create toolContext (results.GetResult Create)
+    | _ ->
+        eprintfn "%s" (parser.PrintUsage())
+        async.Return ExitCodes.EX_USAGE
+    |> Async.RunSynchronously
+
+/// Reports the failure on stderr (usage on stdout) and yields the sysexits code for it.
+let exitCodeForException (ex: exn) =
+    match ex with
+    | :? ArguParseException as parseError when parseError.ErrorCode = ErrorCode.HelpText ->
+        printfn "%s" parseError.Message
+        ExitCodes.EX_OK
+    | :? ArguParseException ->
+        eprintfn "%s" ex.Message
+        ExitCodes.EX_USAGE
+    | DomainStreamException err ->
+        mapDomainErrorToExitCode err
+    | Nocfo.CsvFormatException message ->
+        eprintfn "%s" message
+        ExitCodes.EX_DATAERR
+    | :? FileNotFoundException
+    | :? DirectoryNotFoundException ->
+        eprintfn "%s" ex.Message
+        ExitCodes.EX_NOINPUT
+    | :? UnauthorizedAccessException
+    | :? IOException ->
+        eprintfn "%s" ex.Message
+        ExitCodes.EX_CANTCREAT
+    | _ when ex.Message.StartsWith("Tool configuration failed:", StringComparison.Ordinal) ->
+        eprintfn "%s" ex.Message
+        ExitCodes.EX_CONFIG
+    | _ ->
+        eprintfn "Internal error: %s" ex.Message
+        ExitCodes.EX_SOFTWARE
+
 [<EntryPoint>]
 let main argv =
-    async {
-
-        let parser = ArgumentParser.Create<CliArgs>(programName = "nocfo")
-        let results: ParseResults<CliArgs> =
-            parser.ParseCommandLine(argv, raiseOnUsage = false)
-
-        let input : TextReader =
-            match results.TryGetResult CliArgs.In with
-            | Some path -> upcast new StreamReader(path)
-            | None -> Console.In
-
-        let output : TextWriter =
-            match results.TryGetResult CliArgs.Out with
-            | Some path -> upcast new StreamWriter(path)
-            | None -> Console.Out
-
-        try
-            let dryRun  = results.Contains(CliArgs.DryRun)
-            let verbose = results.Contains(CliArgs.Verbose)
-            let profile = results.TryGetResult CliArgs.Profile
-            let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
-
-            let subcommand = results.GetSubCommand()
-            return!
-                match subcommand with
-                | CliArgs.List _   -> list   toolContext (results.GetResult List)
-                | CliArgs.Update _ -> update toolContext (results.GetResult Update)
-                | CliArgs.Delete _ -> delete toolContext (results.GetResult Delete)
-                | CliArgs.Map _    -> map    toolContext (results.GetResult Map)
-                | CliArgs.Create _ -> create toolContext (results.GetResult Create)
-                | _ ->
-                    eprintfn "%s" (parser.PrintUsage())
-                    async.Return 1
-        with ex when ex.Message.StartsWith("Tool configuration failed:", StringComparison.Ordinal) ->
-            eprintfn "%s" ex.Message
-            return ExitCodes.EX_CONFIG
-    } |> Async.RunSynchronously
+    let parser = ArgumentParser.Create<CliArgs>(programName = "nocfo")
+    try
+        run parser argv
+    with ex ->
+        exitCodeForException ex
