@@ -1,3 +1,4 @@
+# Issue a token at https://login-tst.nocfo.io/auth/tokens/
 [profiles.online-test]
 token = "replace-me-with-api-tst-token"
 base_url = "https://api-tst.nocfo.io"

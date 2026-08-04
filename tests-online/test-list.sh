@@ -10,6 +10,7 @@ setup_online_test_env
 require_local_online_profile
 load_fixture_config
 build_cli_once
+require_working_token
 
 run_list_case \
   "list businesses" \

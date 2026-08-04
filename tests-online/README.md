@@ -9,12 +9,21 @@ selected through `NOCFO_TOOL_CONFIG_HOME`.
 ## Setup
 
 1. Copy `tests-online/config/config.toml.example` to `tests-online/config/config.toml`.
-2. Replace the placeholder token in `tests-online/config/config.toml` with a real api-tst token.
+2. Issue an api-tst token at <https://login-tst.nocfo.io/auth/tokens/> and put it in
+   `tests-online/config/config.toml` in place of the placeholder.
 3. Copy `tests-online/config/fixture.env.example` to `tests-online/config/fixture.env`
 4. Replace `TEST_BUSINESS_SLUG` in `tests-online/config/fixture.env` with the stable test business slug.
 5. Ensure `bash` and `python3` are available.
 
 The real `config.toml` and `fixture.env` are ignored by git.
+
+Tokens expire and can be revoked, so a suite that has not been run for a while will
+typically stop at the authentication preflight. Repeat step 2 to recover; the API
+answers a dead token with `401 Epäkelpo token.` and the CLI exits 77.
+
+The suite unsets `NOCFO_TOKEN`, `NOCFO_TARGET_TOKEN`, `NOCFO_SOURCE_TOKEN` and the
+matching `*_BASE_URL` variables before running, because those would otherwise override
+the `online-test` profile and could aim the mutation tests at production.
 
 ## Run
 

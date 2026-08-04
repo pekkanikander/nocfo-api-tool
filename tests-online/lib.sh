@@ -11,6 +11,7 @@ readonly ONLINE_CONFIG_EXAMPLE_FILE="${ONLINE_CONFIG_DIR}/config.toml.example"
 readonly ONLINE_FIXTURE_FILE="${ONLINE_CONFIG_DIR}/fixture.env"
 readonly PLACEHOLDER_TOKEN="replace-me-with-api-tst-token"
 readonly PLACEHOLDER_SLUG="replace-me-with-api-tst-business-slug"
+readonly TOKEN_PORTAL_URL="https://login-tst.nocfo.io/auth/tokens/"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -24,6 +25,13 @@ setup_online_test_env() {
   export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
   export DOTNET_CLI_TELEMETRY_OPTOUT=1
   export NOCFO_TOOL_CONFIG_HOME="${ONLINE_CONFIG_DIR}"
+
+  # The profile must be the only source of credentials. NOCFO_* variables take
+  # precedence over profile values, so a token left in the caller's shell would
+  # silently redirect the suite at another environment — production, at worst,
+  # where the mutation tests would then write.
+  unset NOCFO_TOKEN NOCFO_TARGET_TOKEN NOCFO_SOURCE_TOKEN
+  unset NOCFO_BASE_URL NOCFO_TARGET_BASE_URL NOCFO_SOURCE_BASE_URL
 
   mkdir -p "${DOTNET_CLI_HOME}"
 }
@@ -105,6 +113,42 @@ build_cli_once() {
   fi
 
   printf 'PASS build tools\n'
+}
+
+# One authenticated request before the suite proper, so that an expired token is
+# reported once, with a remedy, instead of as every test case failing on an empty
+# CSV. Requires build_cli_once.
+require_working_token() {
+  local stderr_file="${WORK_DIR}/preflight.stderr"
+  local exit_code=0
+
+  set +e
+  (
+    cd "${REPO_ROOT}"
+    dotnet run --project tools --no-build -- \
+      --profile "${ONLINE_PROFILE_NAME}" list businesses --fields "id,name,slug"
+  ) >/dev/null 2>"${stderr_file}"
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -eq 0 ]; then
+    printf 'PASS api-tst authentication\n'
+    return 0
+  fi
+
+  printf 'FAIL api-tst authentication (exit code %s)\n' "${exit_code}" >&2
+  cat "${stderr_file}" >&2
+
+  if [ "${exit_code}" -eq 77 ]; then
+    cat >&2 <<EOF
+
+The token in ${ONLINE_CONFIG_FILE} was rejected. Tokens expire and can be revoked;
+issue a fresh one at ${TOKEN_PORTAL_URL} and replace the
+'token' value under [profiles.${ONLINE_PROFILE_NAME}].
+EOF
+  fi
+
+  exit 2
 }
 
 csv_header() {

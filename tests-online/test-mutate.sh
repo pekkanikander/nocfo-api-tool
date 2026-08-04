@@ -11,6 +11,7 @@ require_local_online_profile
 load_fixture_config
 require_mutate_fixtures
 build_cli_once
+require_working_token
 
 run_mutate_case \
   "mutate account description" \
