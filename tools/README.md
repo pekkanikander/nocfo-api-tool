@@ -77,6 +77,8 @@ Read-only commands:
 - `list contacts`
 - `list documents`
 - `map accounts`
+- `balance`
+- `reconcile`
 
 Mutating commands:
 
@@ -108,6 +110,24 @@ Mutating commands:
 | `create accounts -b <id> [--fields …]` | Reads account-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `number`, `name`, optional `type`, `description`, and `opening_balance` |
 | `create contacts -b <id> [--fields …]` | Reads contact-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `type`, `customer_id`, `contact_business_id`, `notes`, and `phone_number` |
 | `create documents -b <id> [--account-id-map <path>] [--strict] [--fields …]` | Reads minimal document-create CSV and POSTs documents sequentially | Optional blueprint account-id remap via mapping CSV |
+| `balance -b <id> --from <date> --to <date> [-a <numbers>…] [--account-type <t>] [--daily] [--fields …]` | Fetches the ledger report for the period and writes a rolling balance | `--daily` emits `date,balance` and needs the selection to name exactly one account |
+| `reconcile --left <source> --right <source> [-b <id>] [--from <date>] [--to <date>] [-a <number>] [--charset <c>] [--tolerance <amount>]` | Compares the daily balances of two sources | Exits `EX_DATAERR` when any day differs by more than `--tolerance` |
+
+### Reconciliation sources
+
+`--left` and `--right` each take one of:
+
+- `ledger` — the server's ledger report; needs `-b`, `--from` and `--to`, and a selection that
+  names exactly one account.
+- `nda:<path>[#<account>]` — the daily closing balances (T40 records) of a Finnish
+  machine-readable bank statement. A file holding several bank accounts must name one; the
+  selector matches the tail of the account number or of the IBAN. `--charset` overrides the
+  character set, which otherwise is ISO 646-FI for a 7-bit file and Latin-1 for an 8-bit one.
+- `csv:<path>` — a `date,balance` CSV, i.e. what `balance --daily` writes.
+
+A balance holds until the side next moves, so a date one source lacks is still compared against
+that source's last known balance. `left-only` and `right-only` mark only the days before a side
+has any balance at all.
 
 Still unimplemented:
 
@@ -206,6 +226,8 @@ The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` fr
   - `delete` accounts/contacts/documents: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
   - `map accounts`: align source/target account streams by `number` and output `source_id,target_id,number`.
   - `create` businesses/accounts/contacts/documents: read create payload rows, optionally rewrite blueprint account IDs for documents, and POST sequentially through the shared command stream machinery.
+  - `balance`: POST the ledger report for the period, narrow it to the selected accounts, and write one row per entry (or one per day with `--daily`).
+  - `reconcile`: open both sources as daily balances, align them by date, and write one row per day.
 
 Everything runs on `AsyncSeq`, so listing scales to large datasets without holding them all in memory.
 

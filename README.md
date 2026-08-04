@@ -116,6 +116,29 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
      < documents-create.csv
    ```
 
+11. **Roll a balance forward** over a period, either entry by entry or as one closing
+    balance per day:
+
+   ```bash
+   dotnet run --project tools -- balance \
+     -b <business-id> --from 2025-01-01 --to 2025-03-31 -a 1920 > ledger.csv
+
+   dotnet run --project tools -- balance \
+     -b <business-id> --from 2025-01-01 --to 2025-03-31 -a 1920 --daily > daily.csv
+   ```
+
+12. **Reconcile** those daily balances against a bank statement (`.nda`, the Finnish
+    machine-readable "Konekielinen tiliote"):
+
+   ```bash
+   dotnet run --project tools -- reconcile \
+     -b <business-id> --from 2025-01-01 --to 2025-03-31 -a 1920 \
+     --left ledger --right "nda:statement.nda#<bank-account>"
+   ```
+
+   Both sides take `ledger`, `nda:<path>[#<account>]` or `csv:<path>`; a day whose balances
+   differ by more than `--tolerance` exits `EX_DATAERR` (65).
+
 ### CLI Notes
 
 - `--profile <name>` / `-p <name>` selects a named profile from `~/.config/nocfo/config.toml`.
@@ -129,7 +152,8 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
   `--out`/`--in` override those streams without shell redirection.
 - Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,
   `update contacts`; `delete accounts`, `delete contacts`, `delete documents`; `create businesses`,
-  `create accounts`, `create contacts`, and minimal `create documents`; plus `map accounts`.
+  `create accounts`, `create contacts`, and minimal `create documents`; plus `map accounts`,
+  `balance` and `reconcile`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,

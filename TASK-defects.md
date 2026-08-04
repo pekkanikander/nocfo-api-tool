@@ -246,8 +246,7 @@ Covered by three cases in `tests/MapAccountsTests.fs` counting hydration calls.
 
 | What | Where |
 | --- | --- |
-| `Reports.fs` in its entirety — nothing references `Reports.addToTotals` | `hawaii-client/src/Reports.fs` |
-| `AccountClass`, `AccountClassTotals`, `Account.classify`, `Account.hydrate` — only used by `Reports.fs` and its tests | `Domain.fs:83–85, 522–552` |
+| `AccountClass`, `AccountClassTotals`, `Account.classify`, `Account.hydrate` — only reachable from tests since `Reports.addToTotals` was replaced | `Domain.fs:83–85, 522–552` |
 | `Streams.streamPatches`, `Streams.streamCreates` | `Streams.fs:93–107` |
 | `Business.ofContext`, `Business.hydrate`, `Document.hydrate`, `Contact.hydrate` | `Domain.fs` |
 | `IOOptions.IncludeHeader`, `.NewLine`, `.UnknownFieldPolicy` and the `UnknownFieldPolicy` DU — declared, defaulted, never read | `Csv.fs:172–195` |
@@ -255,8 +254,8 @@ Covered by three cases in `tests/MapAccountsTests.fs` counting hydration calls.
 | `EntityOps.deltasToCommands` + `Account.diffAccount` / `Contact.diffContact` / `Account.deltasToCommands` / `Contact.deltasToCommands` — only reachable from tests | `Domain.fs:375–398, 557–565, 617–625` |
 | `AccountCommand.UpdateAccount` / `ContactCommand.UpdateContact` branches — the CLI updates via `executeDeltaUpdates`, not via commands | `Domain.fs` |
 
-Note `Reports.fs` is the natural home for the rolling-balance fold — see `PLAN-rolling-balance.md`.
-Replace its contents rather than deleting the file.
+`Reports.fs` is no longer dead: its contents were replaced by the rolling balance and the daily
+reconciliation (`PLAN-rolling-balance.md`).
 
 ---
 

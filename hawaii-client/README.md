@@ -86,7 +86,8 @@ against a live NoCFO environment.
   by fetching the current entity for each CSV `id`, diffing, and PATCHing in CSV order.
 - `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
   `Streams.executeDocumentCommands` interpret command streams and turn them into HTTP API calls.
-- `Reports.addToTotals` shows how to write deterministic folds on top of the streaming surface; treat it as a template for new reporting modules.
+- `Reports.fs` holds the rolling balance (`Balance`), the daily comparison (`Reconcile`) and the sources they read (`BalanceSource`); its folds are pure, so the CLI only supplies the streams.
+- `Tito.fs` reads the Finnish machine-readable bank statement (`.nda`) into records; the layouts are data, reverse-engineered from one Nordea file.
 - `Csv.fs` plus `CsvHelper.fs` provide the generic CSV mapping used by both tests and CLI commands.
 
 Use `Domain-design.md` for the higher-level rationale before touching alignment logic or hydration semantics.

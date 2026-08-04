@@ -141,6 +141,8 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 | `delete` | accounts, contacts, documents |
 | `create` | businesses, accounts, contacts, documents |
 | `map` | accounts (source → target env, keyed on account number) |
+| `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
+| `reconcile` | daily balances of two sources compared day by day |
 
 ```bash
 dotnet run --project tools -- list businesses --fields "id,name,slug"
@@ -148,7 +150,15 @@ dotnet run --project tools -- list accounts -b <slug-or-vat> --fields "id,number
 dotnet run --project tools -- update accounts -b <slug-or-vat> --fields "id,number,name" < file.csv
 dotnet run --project tools -- map accounts -b <slug> > account-id-map.csv
 dotnet run --project tools -- create documents -b <slug> -m account-id-map.csv < documents.csv
+dotnet run --project tools -- balance -b <slug> --from 2025-01-01 --to 2025-03-31 -a 1920 --daily
+dotnet run --project tools -- reconcile -b <slug> --from 2025-01-01 --to 2025-03-31 -a 1920 \
+  --left ledger --right "nda:statement.nda#<bank-account>"
 ```
+
+`balance` and `reconcile` read the server's own ledger report
+(`POST /v1/business/{slug}/report/ledger/`), whose `balance_csum` already includes the balance
+carried into the period. A reconcile source is `ledger`, `nda:<path>[#<account>]` (a TITO bank
+statement) or `csv:<path>` (a `date,balance` CSV, i.e. what `balance --daily` writes).
 
 `delete businesses` is intentionally omitted.
 
@@ -165,9 +175,10 @@ F# requires declaration-before-use ordering:
 5. `JsonHelpers.fs` — STJ utility layer (wraps `Serializer.options`, JSON helpers)
 6. `PatchShape.fs` — Reflection-based patch normalisation
 7. `Domain.fs` — Domain model, hydration, diffing, commands, per-entity streams
-8. `Reports.fs` — Trial-balance fold stub; **currently dead code**, nothing references it
-9. `CsvHelper.fs` — Custom CsvHelper converters
-10. `Csv.fs` — CSV read/write API
+8. `CsvHelper.fs` — Custom CsvHelper converters
+9. `Csv.fs` — CSV read/write API
+10. `Tito.fs` — Reader for the Finnish machine-readable bank statement (TITO, `.nda`)
+11. `Reports.fs` — Rolling balance, daily reconciliation, and the sources they read
 
 `tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Program.fs`.
 
@@ -182,8 +193,11 @@ F# requires declaration-before-use ordering:
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
 - `hawaii-client/src/hawaii-client.csproj` is an empty C# project (no `.cs` files) left over from an
   earlier design. It is still referenced by the `.fsproj` and listed in `nocfo.slnx`.
-- API coverage: businesses, accounts, contacts, documents. Not covered: entries, periods, reports,
-  VAT, tags, files, invoicing. See `ROADMAP.md` Phase 5 and `PLAN-rolling-balance.md`.
+- API coverage: businesses, accounts, contacts, documents, and the ledger report. Not covered:
+  entries, periods, other reports, VAT, tags, files, invoicing. See `ROADMAP.md` Phase 5.
+- The TITO record layouts in `Tito.fs` are reverse-engineered from one Nordea statement, not from
+  the Finanssiala specification. They decode that file correctly but have not been verified
+  against the standard.
 
 ---
 
@@ -211,7 +225,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 65 tests
+dotnet test tests     # 129 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).
@@ -222,6 +236,9 @@ No network access — HTTP is faked with a stub `HttpMessageHandler` (see `Entit
 - `DomainDiffTests.fs` — `Account.diffAccount`, `Account.classify`
 - `EntityOpsTests.fs` — `EntityOps.fetchById` / `diffToPatch` / `deltasToCommands` / `executeDeltaUpdates`
 - `CsvTests.fs` — `Csv.readCsvGeneric` / `writeCsvGeneric` round-trips
+- `TitoTests.fs` — `Tito` record framing, charset, and bank-account selection, on synthetic fixtures
+- `BalanceTests.fs` — `Balance.rows` / `dailyClosing` over a hand-built ledger response
+- `ReconcileTests.fs` — `Reconcile.daily` carry-forward, tolerance, and ordering
 - `BlueprintJsonTests.fs` — document blueprint account-ID remapping
 
 **Unquote + `inline` functions:** Unquote cannot dynamically invoke `inline` SRTP

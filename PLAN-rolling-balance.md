@@ -538,3 +538,52 @@ the bank format so that the comparison logic is already trusted when the parser 
    and fail loudly on anything else, or handle it?
 5. **TITO spec access** — the layouts in §4 are reverse-engineered from one file. Is the Finanssiala
    specification available to check them against before implementation?
+
+---
+
+## 10. As built (2026-08-04)
+
+Steps 1–5 are implemented; steps 6 and 7 are not.
+
+### Deviations from the plan
+
+- **R2 (query-string builder) skipped.** With Route B deferred, the ledger report is a POST with a
+  JSON body and the builder would have had no second caller. `Endpoints.ledgerReport` is four
+  lines of string interpolation like its neighbours.
+- **Route B (step 6) deferred.** `GET /business/{slug}/document/` takes `account`, `date_from`,
+  `date_to`, `page`, `page_size` and `search`, but **no ordering parameter**. A client-side running
+  balance needs date order, so Route B would have to buffer the period and invent an intra-day
+  order — the same class of hazard as `TASK-defects.md` D3. That is a design decision, not an
+  implementation detail.
+- **`DomainError` gained `Invalid` and `BadData`.** Caller-input errors (unknown source, missing
+  period, a selection matching no account) and malformed input files were both landing on
+  `Unexpected`, which exits `EX_SOFTWARE` (70). They now exit `EX_USAGE` (64) and `EX_DATAERR` (65).
+- **`ReconcileRow` columns are `left_balance` / `right_balance`**, not `ledger_` / `statement_`:
+  either side can be any source.
+- **Balances carry forward.** A date only one source has is compared against the other's last known
+  balance, since a balance holds until it next moves. `left-only` / `right-only` therefore mark only
+  the days before a side has any balance at all, rather than every gap.
+- **`Tito.decode` takes `byte[]`, not a `TextReader`**, because choosing between ISO 646-FI and
+  Latin-1 needs the raw bytes.
+- **A `.nda` source names its bank account as `nda:<path>#<account>`.** The sample file holds two
+  statements for two different accounts, which §4 did not anticipate; the selector matches the tail
+  of the account number or of the IBAN, and a file with several accounts and no selector fails with
+  the list of accounts it holds.
+- **`T10.value_date` is `DateOnly option`.** The sample carries `000000` on some transactions.
+
+### Corrections to the plan's own findings
+
+- Ledger entry dates come back as ISO **date-times** (`2025-01-21T00:00:00`), not days. `Balance`
+  narrows them to `yyyy-MM-dd`; comparing them unnormalised against a bank date never matches.
+- `balance_csum` **includes** `opening_balance` (verified against api-tst), so it is the running
+  balance as it stands.
+- In `T00` the IBAN sits at offset **292** (width 18), not 293; BIC at 311 (width 11).
+
+### Open questions, answered by the implementation
+
+1. Verbs are `balance` and `reconcile`.
+2. `--account` takes account **numbers**, which is what the ledger response keys on.
+3. `--from` / `--to` only; `--period` is not implemented.
+4. Multi-currency is not handled: `T00.currency` is decoded but not checked.
+5. The Finanssiala specification was not available; the layouts remain reverse-engineered from one
+   Nordea file and are documented as such in `Tito.fs` and `CLAUDE.md`.
