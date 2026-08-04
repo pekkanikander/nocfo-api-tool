@@ -13,11 +13,13 @@ require_mutate_fixtures
 build_cli_once
 require_working_token
 
+# `number` rather than `description`: it is the only always-populated field that
+# PatchedAccountRequest accepts, and an empty original could not be restored.
 run_mutate_case \
-  "mutate account description" \
+  "mutate account number" \
   "${TEST_ACCOUNT_ID}" \
-  "description" \
-  "__nocfo_test__" \
+  "number" \
+  "9999" \
   accounts -b "${TEST_BUSINESS_SLUG}" || true
 
 print_summary_and_exit

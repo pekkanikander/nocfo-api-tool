@@ -139,6 +139,24 @@ Covered by `tests/MapAccountsTests.fs` (mixed-width numbers in either order, unm
 accounts, target-only accounts, error propagation) and by the unsorted-input case in
 `tests/StreamAlignmentTests.fs`.
 
+**Ordering, measured (August 2026).** Once the api-tst token was refreshed, the question above
+was settled empirically by renumbering one account to `999`, listing the chart, and restoring it:
+
+- `padded_number` is the account number **right-padded with zeros to seven digits**:
+  `1540 → 1540000`, `999 → 9990000`. It is therefore a numeric restatement of the *lexicographic*
+  order of `number`, not of its numeric order.
+- `GET …/account/` returns accounts in exactly that order — lexicographic by `number`, so `999`
+  sorts after `4290`.
+
+So the merge described in this defect really did break on mixed-width numbers, and the originally
+proposed key (`padded_number`) would have worked. The order-independent fix stays: the ordering is
+not documented anywhere in the spec, nothing pins it, and `map accounts` gains nothing from
+depending on it.
+
+Incidentally, a `PATCH` response carries a **stale** `padded_number` — restoring `999` to `1500`
+returned `padded_number = 9990000`, while a subsequent `GET` gave the correct `1500000`. A
+server-side wart; harmless here because nothing in this repo reads the field.
+
 ---
 
 ## D4 — `Business.ofRaw` / `fetchBySlug` index `identifiers.[0]` unconditionally
@@ -249,6 +267,30 @@ introduces (`date_from`, `date_to`, `account`).
   `.claude/settings.json` as well as personal `settings.local.json`. If only the latter is meant to
   be private, ignore `.claude/settings.local.json` instead.
 - `README.md` still refers to `csv/…` paths and a `csv/` directory that does not exist in this repo.
+
+---
+
+## D11 — An empty CSV cell cannot clear a field, and says nothing about it
+
+**Severity: low-medium.** `hawaii-client/src/Csv.fs`, `hawaii-client/src/PatchShape.fs`
+
+`update accounts --fields "id,description"` fed `616870,` (empty cell) issues **no** `PATCH` at all
+and exits 0. The empty value becomes `None`, `PatchShape` strips it as unset, and the row is
+classified as a no-op. There is no way to clear a nullable field through the CSV path, and no
+diagnostic saying so — the user sees a successful run that changed nothing.
+
+Found while repairing `tests-online/`: the mutation test overwrote an account's `description`, and
+its restore step silently did nothing, leaving `__nocfo_test__` in api-tst while reporting PASS.
+The harness now verifies that a restore actually landed and rejects an empty original value, and
+the case was moved onto `number`, so the suite no longer depends on the answer here.
+
+Two defensible readings, and the choice is a design decision rather than an obvious bug:
+
+- **Empty means "leave unchanged"** (today's behaviour). Then an explicit `--fields` naming the
+  column arguably deserves a warning when a named column is uniformly ignored.
+- **Empty means "clear"**, with absence of the column meaning "leave unchanged". More expressive,
+  and `--fields` already distinguishes the two cases, but it makes a truncated or half-filled CSV
+  destructive.
 
 ---
 

@@ -321,6 +321,7 @@ run_mutate_case() {
 
   local list_stdout="${WORK_DIR}/${case_slug}.list1.stdout"
   local list2_stdout="${WORK_DIR}/${case_slug}.list2.stdout"
+  local list3_stdout="${WORK_DIR}/${case_slug}.list3.stdout"
   local mutate_csv="${WORK_DIR}/${case_slug}.mutate.csv"
   local restore_csv="${WORK_DIR}/${case_slug}.restore.csv"
   local update_stderr="${WORK_DIR}/${case_slug}.update.stderr"
@@ -359,6 +360,16 @@ run_mutate_case() {
     return 1
   fi
 
+  # An empty CSV cell means "leave unchanged", not "clear", so the restore step
+  # could not put an originally-empty field back and would pass while leaving
+  # the mutated value behind.
+  if [ -z "${original_value}" ]; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (%s of id=%s is empty; this case needs a field with a value to restore)\n' \
+      "${case_name}" "${field}" "${entity_id}"
+    return 1
+  fi
+
   # --- Step 2: mutate ---
   printf 'id,%s\n%s,%s\n' "${field}" "${entity_id}" "${new_value}" > "${mutate_csv}"
   exit_code=0
@@ -386,7 +397,7 @@ run_mutate_case() {
       if ! found_value="$(csv_get_value "${list2_stdout}" "id" "${entity_id}" "${field}" 2>&1)"; then
         failures="${failures}verify: entity id=${entity_id} not found after mutate"$'\n'
       elif [ "${found_value}" != "${new_value}" ]; then
-        failures="${failures}verify: expected ${field}=${new_value!r}, got '${found_value}'"$'\n'
+        failures="${failures}verify: expected ${field}='${new_value}', got '${found_value}'"$'\n'
       fi
     fi
   fi
@@ -401,6 +412,26 @@ run_mutate_case() {
 
   if [ "${exit_code}" -ne 0 ] || stderr_has_unhandled_exception "${restore_stderr}"; then
     failures="${failures}restore step failed (exit ${exit_code}) — tst state may be dirty"$'\n'
+  fi
+
+  # --- Step 5: confirm the restore landed ---
+  # A no-op update also exits 0, so the exit code above does not prove anything
+  # was written back.
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${list_cmd[@]}") >"${list3_stdout}" 2>/dev/null
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ]; then
+    failures="${failures}restore verification list failed (exit ${exit_code}) — tst state may be dirty"$'\n'
+  else
+    found_value=""
+    if ! found_value="$(csv_get_value "${list3_stdout}" "id" "${entity_id}" "${field}" 2>&1)"; then
+      failures="${failures}restore verification: entity id=${entity_id} not found"$'\n'
+    elif [ "${found_value}" != "${original_value}" ]; then
+      failures="${failures}restore verification: ${field} is '${found_value}', expected '${original_value}' — tst state is dirty"$'\n'
+    fi
   fi
 
   if [ -n "${failures}" ]; then
