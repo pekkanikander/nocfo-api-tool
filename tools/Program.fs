@@ -300,6 +300,12 @@ let private mapDomainErrorToExitCode (err: DomainError) =
         | NocfoClient.Http.HttpError.ParseError (url, message) ->
             eprintfn "Unexpected API response at %O: %s" url message
             ExitCodes.EX_SOFTWARE
+        | NocfoClient.Http.HttpError.Transport (url, message) ->
+            eprintfn "Cannot reach %O: %s" url message
+            ExitCodes.EX_UNAVAILABLE
+        | NocfoClient.Http.HttpError.Timeout url ->
+            eprintfn "Request timed out: %O" url
+            ExitCodes.EX_UNAVAILABLE
     | DomainError.Unexpected message when message.StartsWith("No matching business:", StringComparison.Ordinal) ->
         eprintfn "%s" message
         ExitCodes.EX_NOINPUT

@@ -53,7 +53,7 @@ sysexits codes, but it is only reachable from `map accounts`.
 
 ---
 
-## D2 — Transport failures are invisible to the error model and are never retried
+## D2 — Transport failures are invisible to the error model and are never retried — **FIXED**
 
 **Severity: high.** `hawaii-client/src/Http.fs`
 
@@ -69,6 +69,12 @@ so:
 **Fix**: add `Transport of url: Uri * message: string` and `Timeout of url: Uri` to `HttpError`,
 catch both exception types in `send`, and include them in `shouldRetry`.
 Extend `mapDomainErrorToExitCode` with the new cases (`EX_UNAVAILABLE`).
+
+**Fixed**: `send` awaits through `Async.Catch` and classifies the flattened exception —
+`HttpRequestException` → `Transport`, `TaskCanceledException` (when the caller's token is not
+cancelled) → `Timeout`; anything else is rethrown with its stack intact. Both are retried.
+Covered by `tests/HttpErrorTests.fs`, which also asserts that a transient transport failure is
+retried rather than surfaced.
 
 ---
 

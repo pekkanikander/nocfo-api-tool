@@ -4,6 +4,8 @@ open System
 open System.Net
 open System.Net.Http
 open System.Net.Http.Headers
+open System.Runtime.ExceptionServices
+open System.Threading.Tasks
 open FSharp.Control
 open NocfoApi.Http
 
@@ -23,6 +25,8 @@ module Http =
         | ServerError of url: Uri * statusCode: HttpStatusCode * body: string
         | ClientError of url: Uri * statusCode: HttpStatusCode * body: string
         | ParseError of url: Uri * message: string
+        | Transport of url: Uri * message: string
+        | Timeout of url: Uri
 
     let ofHttpClient (client: HttpClient) (token: string) (verbose: bool) =
         { client = client; token = token; timeout = TimeSpan.FromSeconds 30.0; verbose = verbose }
@@ -67,7 +71,29 @@ module Http =
             eprintfn "[http] %s %s" request.Method.Method request.RequestUri.OriginalString
         let t0 = DateTime.UtcNow
         let! ct = Async.CancellationToken
-        use! response = httpContext.client.SendAsync(request, ct) |> Async.AwaitTask
+        let! sendOutcome =
+            httpContext.client.SendAsync(request, ct) |> Async.AwaitTask |> Async.Catch
+        match sendOutcome with
+        | Choice2Of2 ex ->
+            let inner =
+                match ex with
+                | :? AggregateException as aggregate -> aggregate.Flatten().InnerException
+                | _ -> ex
+            match inner with
+            | :? HttpRequestException ->
+                eprintfn "Request failed: %s %s %s"
+                    request.Method.Method request.RequestUri.OriginalString inner.Message
+                return Error (Transport (request.RequestUri, inner.Message))
+            | :? TaskCanceledException when not ct.IsCancellationRequested ->
+                eprintfn "Request timed out after %.0fs: %s %s"
+                    httpContext.client.Timeout.TotalSeconds
+                    request.Method.Method request.RequestUri.OriginalString
+                return Error (Timeout request.RequestUri)
+            | _ ->
+                ExceptionDispatchInfo.Capture(inner).Throw()
+                return Unchecked.defaultof<Result<string, HttpError>>
+        | Choice1Of2 response ->
+        use response = response
         let! content = response.Content.ReadAsStringAsync() |> Async.AwaitTask
         if httpContext.verbose then
             let ms = int (DateTime.UtcNow - t0).TotalMilliseconds
@@ -113,7 +139,7 @@ module Http =
 
     let private shouldRetry (err: HttpError) =
         match err with
-        | RateLimited _ | ServerError _ -> true
+        | RateLimited _ | ServerError _ | Transport _ | Timeout _ -> true
         | _ -> false
 
     let private retryDelay (attempt: int) (baseDelay: TimeSpan) (err: HttpError) =

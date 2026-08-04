@@ -19,6 +19,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EndpointsTests.fs" />
+    <Compile Include="HttpErrorTests.fs" />
     <Compile Include="PatchShapeTests.fs" />
     <Compile Include="StreamAlignmentTests.fs" />
     <Compile Include="DomainDiffTests.fs" />
