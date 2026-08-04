@@ -1,27 +1,33 @@
 namespace NocfoClient
 
+open System
+
 module Endpoints =
+    let private seg (value: string) = Uri.EscapeDataString value
+
+    let private paged (path: string) (page: int) = $"{path}?page_size=100&page={page}"
+
     let businessListUrl               = "/business/"
-    let businessBySlug (slug: string) = $"/business/{slug}/"
-    let businessList (page: int)      = $"/business/?page_size=100&page={page}"
+    let businessBySlug (slug: string) = $"/business/{seg slug}/"
+    let businessList (page: int)      = paged businessListUrl page
 
     let accountsBySlug (slug: string) =
-        $"/business/{slug}/account/"
+        $"/business/{seg slug}/account/"
     let accountsBySlugPage (slug: string) (page: int) =
-        $"/business/{slug}/account/?page_size=100&page={page}"
+        paged (accountsBySlug slug) page
     let accountById (slug: string) (id: string) =
-        $"/business/{slug}/account/{id}/"
+        $"/business/{seg slug}/account/{seg id}/"
 
-    let documentsBySlugPage (slug: string) (page: int) =
-        $"/business/{slug}/document/?page_size=100&page={page}"
     let documentsBySlug (slug: string) =
-        $"/business/{slug}/document/"
+        $"/business/{seg slug}/document/"
+    let documentsBySlugPage (slug: string) (page: int) =
+        paged (documentsBySlug slug) page
     let documentById (slug: string) (id: string) =
-        $"/business/{slug}/document/{id}/"
+        $"/business/{seg slug}/document/{seg id}/"
 
     let contactsBySlug (slug: string) =
-        $"/business/{slug}/contacts/"
+        $"/business/{seg slug}/contacts/"
     let contactsBySlugPage (slug: string) (page: int) =
-        $"/business/{slug}/contacts/?page_size=100&page={page}"
+        paged (contactsBySlug slug) page
     let contactById (slug: string) (id: string) =
-        $"/business/{slug}/contacts/{id}/"
+        $"/business/{seg slug}/contacts/{seg id}/"

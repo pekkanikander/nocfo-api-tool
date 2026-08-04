@@ -183,7 +183,7 @@ names the wrong path.
 
 ---
 
-## D9 — URL construction interpolates path segments unescaped
+## D9 — URL construction interpolates path segments unescaped — **FIXED**
 
 **Severity: low.** `hawaii-client/src/Endpoints.fs`
 
@@ -194,6 +194,9 @@ one as soon as query parameters carry user input — which is exactly what the r
 introduces (`date_from`, `date_to`, `account`).
 
 **Fix**: one small `Uri.EscapeDataString`-based segment/query helper before adding new endpoints.
+
+**Fixed**: `seg` escapes every interpolated slug and id; `paged` replaces the four repetitions of
+`?page_size=100&page={page}`. Covered by `tests/EndpointsTests.fs`.
 
 ---
 

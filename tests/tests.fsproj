@@ -18,6 +18,7 @@
     <ProjectReference Include="../tools/tools.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="EndpointsTests.fs" />
     <Compile Include="PatchShapeTests.fs" />
     <Compile Include="StreamAlignmentTests.fs" />
     <Compile Include="DomainDiffTests.fs" />
