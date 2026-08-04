@@ -104,7 +104,7 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
    ```bash
    NOCFO_SOURCE_TOKEN="paste-source-token" NOCFO_TARGET_TOKEN="paste-target-token" \
    dotnet run --project tools -- map accounts \
-     -b <business-id> > csv/account-id-map.csv
+     -b <business-id> > account-id-map.csv
    ```
 
 10. **Create minimal documents in target**:
@@ -112,8 +112,8 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
    ```bash
    dotnet run --project tools -- create documents \
      -b <target-business-id> \
-     --account-id-map csv/account-id-map.csv \
-     < csv/documents-create.csv
+     --account-id-map account-id-map.csv \
+     < documents-create.csv
    ```
 
 ### CLI Notes

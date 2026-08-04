@@ -257,7 +257,7 @@ introduces (`date_from`, `date_to`, `account`).
 
 ---
 
-## D10 — Repository hygiene
+## D10 — Repository hygiene — **FIXED**
 
 - `tmp/` is **untracked and not gitignored**, and currently contains
   `Konekielinen tiliote(26-04-01).nda` — a real Nordea statement with individuals' names, IBANs and
