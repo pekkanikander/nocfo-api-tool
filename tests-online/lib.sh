@@ -89,6 +89,17 @@ EOF
   fi
 }
 
+require_ledger_fixtures() {
+  if [ -z "${TEST_LEDGER_ACCOUNT:-}" ] || [ -z "${TEST_LEDGER_FROM:-}" ] || [ -z "${TEST_LEDGER_TO:-}" ]; then
+    cat >&2 <<EOF
+${ONLINE_FIXTURE_FILE} must define TEST_LEDGER_ACCOUNT, TEST_LEDGER_FROM and TEST_LEDGER_TO:
+an account number with entries in the api-tst business, and a date range that covers them.
+Used by the balance and reconcile cases.
+EOF
+    exit 2
+  fi
+}
+
 build_cli_once() {
   local stdout_file="${WORK_DIR}/build.stdout"
   local stderr_file="${WORK_DIR}/build.stderr"

@@ -12,7 +12,10 @@ selected through `NOCFO_TOOL_CONFIG_HOME`.
 2. Issue an api-tst token at <https://login-tst.nocfo.io/auth/tokens/> and put it in
    `tests-online/config/config.toml` in place of the placeholder.
 3. Copy `tests-online/config/fixture.env.example` to `tests-online/config/fixture.env`
-4. Replace `TEST_BUSINESS_SLUG` in `tests-online/config/fixture.env` with the stable test business slug.
+4. Replace the placeholders in `tests-online/config/fixture.env`: `TEST_BUSINESS_SLUG`
+   (a stable test business slug), `TEST_ACCOUNT_ID` (for the mutation tests), and
+   `TEST_LEDGER_ACCOUNT`/`TEST_LEDGER_FROM`/`TEST_LEDGER_TO` (an account and a date
+   range with ledger entries, for the balance and reconcile cases).
 5. Ensure `bash` and `python3` are available.
 
 The real `config.toml` and `fixture.env` are ignored by git.
