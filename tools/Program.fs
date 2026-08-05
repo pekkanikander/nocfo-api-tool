@@ -587,6 +587,12 @@ let balance (toolContext: ToolContext) (args: ParseResults<BalanceArgs>) =
         | Ok ledger ->
 
         let rows = Balance.rows numbers ledger
+        match rows |> List.map (fun row -> row.account_number) |> List.distinct with
+        | [] ->
+            eprintfn "No account in the ledger report matches the selection."
+            return ExitCodes.EX_DATAERR
+        | accounts ->
+
         if not (args.Contains BalanceArgs.Daily) then
             do!
                 AsyncSeq.ofSeq rows
@@ -594,10 +600,7 @@ let balance (toolContext: ToolContext) (args: ParseResults<BalanceArgs>) =
                 |> AsyncSeq.iter ignore
             return ExitCodes.EX_OK
         else
-            match rows |> List.map (fun row -> row.account_number) |> List.distinct with
-            | [] ->
-                eprintfn "No account in the ledger report matches the selection."
-                return ExitCodes.EX_DATAERR
+            match accounts with
             | [ _ ] ->
                 do!
                     AsyncSeq.ofSeq (Balance.dailyClosing rows)
