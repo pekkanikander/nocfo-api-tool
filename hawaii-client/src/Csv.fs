@@ -3,7 +3,6 @@ namespace Nocfo
 open System
 open System.Globalization
 open System.IO
-open System.Linq.Expressions
 open System.Reflection
 open CsvHelper
 open CsvHelper.Configuration
@@ -24,13 +23,7 @@ module private CsvFieldMapping =
     |> List.filter (fun s -> s <> "")
 
   let private mapProperty<'T> (map: DefaultClassMap<'T>) (p: PropertyInfo) (index: int) (header: string option) =
-    let param = Expression.Parameter(typeof<'T>, "x")
-    let bodyProp = Expression.Property(param, p) :> Expression
-    let bodyObj =
-      if p.PropertyType.IsValueType then Expression.Convert(bodyProp, typeof<obj>) :> Expression
-      else bodyProp
-    let lambda : Expression<Func<'T, obj>> = Expression.Lambda<Func<'T, obj>>(bodyObj, param)
-    let mm = CsvMapExtensions.MapBoxed(map, lambda).Index(index)
+    let mm = map.Map(typeof<'T>, p).Index(index)
     header |> Option.iter (fun h -> mm.Name(h) |> ignore)
     mm |> ignore
 

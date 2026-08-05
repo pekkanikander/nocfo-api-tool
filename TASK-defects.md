@@ -259,7 +259,7 @@ reconciliation (`PLAN-rolling-balance.md`).
 
 ---
 
-## D8 — `hawaii-client/src/hawaii-client.csproj` is an empty C# project
+## D8 — `hawaii-client/src/hawaii-client.csproj` is an empty C# project — **FIXED**
 
 **Severity: low.** It declares `AssemblyName`/`RootNamespace` `Nocfo.CsvHelpers` and a `CsvHelper`
 package reference, but `src/` contains no `.cs` files — it builds an empty assembly. It is
@@ -269,6 +269,13 @@ same name (`CsvHelper.fs`, `module Nocfo.CsvHelpers`), which is what actually ge
 **Fix**: delete the `.csproj`, its `<ProjectReference>` in `hawaii-client.fsproj`, and its entry in
 `nocfo.slnx`. The header comment inside it (`<!-- hawaii-client/hawaii-client.csproj -->`) also
 names the wrong path.
+
+**Fixed**, but the premise above was wrong: the project was *not* empty. It compiled the one file
+this audit missed, `src/CsvMapExtension.cs`, whose `MapBoxed` bound CsvHelper's non-generic
+`ClassMap.Map` overload — F# cannot pick it from the two `Map(Expression …)` candidates (FS0041).
+The shim turned out to be unnecessary anyway: `Csv.mapProperty` already holds the `PropertyInfo`,
+so it now calls the `Map(Type, MemberInfo)` overload directly, which is unambiguous and drops the
+hand-built `Expression` tree too. The `.cs` file, the `.csproj` and both references are gone.
 
 ---
 

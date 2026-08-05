@@ -24,6 +24,5 @@
     <Compile Include="src/Reports.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="src/hawaii-client.csproj" />
   </ItemGroup>
 </Project>
