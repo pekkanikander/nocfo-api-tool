@@ -104,20 +104,3 @@ module Streams =
         source
         |> AsyncSeq.mapAsync change
 
-
-    let streamPatches<'Payload, 'Response>
-        (http: HttpContext)
-        (getPath: 'Payload -> string)
-        (source: AsyncSeq<'Payload>)
-        : AsyncSeq<Result<'Response, HttpError>> =
-        source |> streamChanges (fun payload ->
-            Http.patchJson<'Payload, 'Response> http (getPath payload) payload)
-
-    let streamCreates<'Payload, 'Response>
-        (http: HttpContext)
-        (getPath: 'Payload -> string)
-        (source: AsyncSeq<'Payload>)
-        : AsyncSeq<Result<'Response, HttpError>> =
-        source |> streamChanges (fun payload ->
-            Http.postJson<'Payload, 'Response> http (getPath payload) payload)
-

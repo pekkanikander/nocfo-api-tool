@@ -165,21 +165,11 @@ module Csv =
   open CsvFieldMapping
   open CsvHeaderValidation
 
-  type UnknownFieldPolicy =
-    | Fail
-    | WarnAndDrop
-
   type IOOptions =
-    { Culture            : CultureInfo
-      IncludeHeader      : bool
-      NewLine            : string
-      UnknownFieldPolicy : UnknownFieldPolicy }
+    { Culture : CultureInfo }
 
   let defaultIOOptions =
-    { Culture            = CultureInfo.InvariantCulture
-      IncludeHeader      = true
-      NewLine            = "\n"
-      UnknownFieldPolicy = UnknownFieldPolicy.Fail }
+    { Culture = CultureInfo.InvariantCulture }
 
   let private mkCsvWriter (tw: TextWriter) (opts: IOOptions) =
     let cfg = CsvConfiguration(opts.Culture)

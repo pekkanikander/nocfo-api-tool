@@ -242,7 +242,7 @@ Covered by three cases in `tests/MapAccountsTests.fs` counting hydration calls.
 
 ---
 
-## D7 — Dead code
+## D7 — Dead code — **FIXED**
 
 **Severity: low**, but the project's own rules say to delete it cleanly.
 
@@ -258,6 +258,15 @@ Covered by three cases in `tests/MapAccountsTests.fs` counting hydration calls.
 
 `Reports.fs` is no longer dead: its contents were replaced by the rolling balance and the daily
 reconciliation (`PLAN-rolling-balance.md`).
+
+**Fixed**: everything in the table deleted, plus `DocumentCommand.UpdateDocument`, which had the
+same shape as the account/contact cases (a DU case with match branches but no producer), and
+`Alignment.alignEntries`, whose last caller was the deleted `deltasToCommands` (the D3 fix had
+already moved `map accounts` off it). The tests
+that only exercised the deleted code went with it (`classify`/`diffAccount` in
+`DomainDiffTests.fs`, the two `deltasToCommands` cases in `EntityOpsTests.fs`). The stream-alignment
+update path is thereby decided: updates go through `executeDeltaUpdates` (fetch-per-row);
+`Streams.alignByKey` stays for `map accounts` and `Reconcile.daily`.
 
 ---
 

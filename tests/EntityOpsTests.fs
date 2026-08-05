@@ -59,16 +59,6 @@ let makeAccount (id: int) (name: string) (number: string) : AccountFull =
 
 let private emptyPatch : PatchedAccountRequest = PatchedAccountRequest.Create()
 
-[<CLIMutable>]
-type private TestFull =
-    { id: int
-      value: string }
-
-[<CLIMutable>]
-type private TestDelta =
-    { id: int
-      value: string }
-
 [<Fact>]
 let ``fetchById returns decoded entity on success`` () =
     let account = makeAccount 42 "Revenue" "3000"
@@ -128,44 +118,6 @@ let ``diffToPatch rejects mismatched ids`` () =
         test <@ message.Contains("Patched account id 99") @>
     | other ->
         Assert.Fail $"Expected mismatched-id error, got %A{other}"
-
-[<Fact>]
-let ``deltasToCommands emits commands for matches and skips API-only rows`` () =
-    let diff (full: TestFull) (delta: TestDelta) =
-        if full.value = delta.value then Ok None
-        else Ok (Some $"{full.id}:{delta.value}")
-
-    let results =
-        EntityOps.deltasToCommands
-            (fun (full: TestFull) -> full.id)
-            (fun (delta: TestDelta) -> delta.id)
-            "test entity"
-            diff
-            (AsyncSeq.ofSeq [ Ok { id = 1; value = "old" }; Ok { id = 2; value = "skip" } ])
-            (AsyncSeq.ofSeq [ Ok { id = 1; value = "new" } ])
-        |> AsyncSeq.toListSynchronously
-
-    test <@ results = [ Ok "1:new" ] @>
-
-[<Fact>]
-let ``deltasToCommands reports CSV-only rows as errors`` () =
-    let diff (_: TestFull) (_: TestDelta) = Ok (Some "unused")
-
-    let results =
-        EntityOps.deltasToCommands
-            (fun (full: TestFull) -> full.id)
-            (fun (delta: TestDelta) -> delta.id)
-            "test entity"
-            diff
-            (AsyncSeq.ofSeq [ Ok { id = 1; value = "left" } ])
-            (AsyncSeq.ofSeq [ Ok { id = 2; value = "right" } ])
-        |> AsyncSeq.toListSynchronously
-
-    match results with
-    | [ Error (DomainError.Unexpected message) ] ->
-        test <@ message = "Alignment failure: missing test entity for CSV id 2." @>
-    | other ->
-        Assert.Fail $"Expected one alignment error, got %A{other}"
 
 [<Fact>]
 let ``executeDeltaUpdates fetches diffs patches and wraps the updated entity`` () =

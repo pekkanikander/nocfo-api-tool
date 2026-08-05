@@ -50,8 +50,7 @@ directories in this repo, despite what older docs and the README examples may im
 
 - All list endpoints are paginated (page numbers, not cursors, since the Apr 2026 API update).
 - `AsyncSeq.fs` → `paginateByPageSRTP` drives pagination lazily via SRTP constraints.
-- `Streams.fs` provides `alignByKey`, `streamPaginated`, `streamChanges`, `streamPatches`, `streamCreates`
-  (the last two are currently unused).
+- `Streams.fs` provides `alignByKey`, `streamPaginated`, `streamChanges`.
 - Use `AsyncSeq` everywhere; never buffer full lists into memory.
 - `Streams.alignByKey` requires **both** inputs to be sorted by the *same* comparison as the key
   function it is given; it raises `StreamOrderException` if they are not. Do not use it against
@@ -64,8 +63,8 @@ directories in this repo, despite what older docs and the README examples may im
   detect no-op updates before sending them to the API.
 - CSV imports become `*Delta` records (hand-typed subsets of full records); they are diffed against
   current state before generating PATCH calls.
-- Two diff/update paths exist: `EntityOps.executeDeltaUpdates` (fetch-per-row; what the CLI uses)
-  and `EntityOps.deltasToCommands` (stream alignment; only exercised by tests).
+- Updates go through `EntityOps.executeDeltaUpdates` (fetch-per-row): fetch the current entity for
+  each CSV `id`, diff via `PatchShape`, PATCH only when something changed.
 
 ### Authentication & Configuration
 
@@ -188,8 +187,6 @@ F# requires declaration-before-use ordering:
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
 - API coverage: businesses, accounts, contacts, documents, and the ledger report. Not covered:
   entries, periods, other reports, VAT, tags, files, invoicing. See `ROADMAP.md` Phase 5.
-- Dead code flagged in `TASK-defects.md` D7 (test-only diff/command machinery, unused stream
-  helpers) awaits a decision on whether the stream-alignment update path stays.
 
 ---
 
@@ -217,7 +214,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 131 tests
+dotnet test tests     # 116 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).
@@ -225,8 +222,8 @@ No network access — HTTP is faked with a stub `HttpMessageHandler` (see `Entit
 
 - `PatchShapeTests.fs` — `PatchShape.Normalize` and `HasChanges` logic
 - `StreamAlignmentTests.fs` — `Streams.alignByKey` merge algorithm
-- `DomainDiffTests.fs` — `Account.diffAccount`, `Account.classify`
-- `EntityOpsTests.fs` — `EntityOps.fetchById` / `diffToPatch` / `deltasToCommands` / `executeDeltaUpdates`
+- `DomainDiffTests.fs` — `Business.ofRaw` construction edge cases
+- `EntityOpsTests.fs` — `EntityOps.fetchById` / `diffToPatch` / `executeDeltaUpdates`
 - `CsvTests.fs` — `Csv.readCsvGeneric` / `writeCsvGeneric` round-trips
 - `TitoTests.fs` — `Tito` record framing, charset, and bank-account selection, on synthetic fixtures
 - `BalanceTests.fs` — `Balance.rows` / `dailyClosing` over a hand-built ledger response
@@ -239,11 +236,11 @@ binding and assert on `result`:
 
 ```fsharp
 // ✗ fails at runtime — Unquote can't reflect into an inline function
-test <@ Account.classify acc = Some Asset @>
+test <@ someInlineFn arg = expected @>
 
 // ✓ correct pattern
-let result = Account.classify acc
-test <@ result = Some Asset @>
+let result = someInlineFn arg
+test <@ result = expected @>
 ```
 
 ### 2. Online regression tests (`tests-online/`)

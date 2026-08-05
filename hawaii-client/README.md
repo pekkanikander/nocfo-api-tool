@@ -103,8 +103,6 @@ Use `Domain-design.md` for the higher-level rationale before touching alignment 
 - `Account.executeDeltaUpdates` / `Contact.executeDeltaUpdates` implement per-row updates.
 - `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
   `Streams.executeDocumentCommands` implement deletes and document creation.
-- `Alignment.alignEntries` is used by `map accounts` to align hydrated source and target
-  account streams by account number.
 - `Csv.fs` and `Nocfo.CsvHelpers` keep CSV exports/imports deterministic.
 
 If you add or rename domain types, plan to update both this README and `tools/README.md` so users understand which commands are affected.

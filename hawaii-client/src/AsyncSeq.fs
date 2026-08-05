@@ -20,7 +20,6 @@ module AsyncResult =
     let map f         = liftAsync (Result.map f)
     let bind f        = liftAsync (Result.bind f)
     let mapError f    = liftAsync (Result.mapError f)
-    let existsOk p    = liftAsync (Result.existsOk p)
 
 module AsyncSeq =
     let tryHead (s: AsyncSeq<'T>) : Async<'T option> = FSharp.Control.AsyncSeq.tryFirst s

@@ -84,10 +84,6 @@ type BusinessResult =
 /// Accounts
 /// ------------------------------------------------------------
 
-type AccountClass = Asset | Liability | Equity | Income | Expense
-
-type AccountClassTotals = Map<AccountClass, decimal>
-
 /// Accounts are identified by their ID. Each account is associated with a business,
 /// but we don't model that relationship yet, as we don't need it yet.
 type AccountFull  = NocfoApi.Types.Account
@@ -113,7 +109,6 @@ type AccountCreatePayload =
 /// Domain-level account commands expressing intent before hitting HTTP.
 type AccountCommand =
   | CreateAccount of AccountCreatePayload
-  | UpdateAccount of AccountDelta
   | DeleteAccount of accountId:int
 
 /// Result of executing an account command.
@@ -149,7 +144,6 @@ type DocumentDelta =
 
 type DocumentCommand =
   | CreateDocument  of DocumentCreatePayload
-  | UpdateDocument  of DocumentDelta
   | DeleteDocument  of documentId:int
 
 type DocumentResult =
@@ -184,7 +178,6 @@ type ContactCreatePayload =
 
 type ContactCommand =
   | CreateContact of ContactCreatePayload
-  | UpdateContact of ContactDelta
   | DeleteContact of contactId:int
 
 type ContactResult =
@@ -214,41 +207,6 @@ module AsyncSeqResult =
     |> AsyncSeq.map (function
         | Ok value -> value
         | Error err -> raise (DomainStreamException err))
-
-module Alignment =
-
-  let alignEntries<'L, 'R, 'K, 'r when 'K : comparison>
-    (keyL          : 'L -> 'K)
-    (keyR          : 'R -> 'K)
-    (onAligned     : 'L -> 'R -> Result<'r, DomainError>)
-    (onMissingLeft : 'R -> Result<'r, DomainError>)   // right-only
-    (onMissingRight: 'L -> Result<'r, DomainError>)   // left-only
-    (left          : AsyncSeq<Result<'L, DomainError>>)
-    (right         : AsyncSeq<Result<'R, DomainError>>)
-    : AsyncSeq<Result<'r, DomainError>> =
-
-    let computation () =
-      let leftPlain  = AsyncSeqResult.unwrapOrThrow left
-      let rightPlain = AsyncSeqResult.unwrapOrThrow right
-
-      NocfoClient.Streams.alignByKey
-        keyL
-        keyR
-        leftPlain
-        rightPlain
-      |> AsyncSeq.map (function
-          | StreamAlignment.Aligned (l, r) -> onAligned l r
-          | StreamAlignment.MissingLeft  r -> onMissingLeft  r
-          | StreamAlignment.MissingRight l -> onMissingRight l)
-
-    asyncSeq {
-      try
-        yield! computation ()
-      with
-      | DomainStreamException err ->
-          yield Error err
-    }
-
 
 module DeltaUpdate =
 
@@ -374,33 +332,6 @@ module EntityOps =
       if PatchShape<'Full, 'Patch>.HasChanges normalised then Ok (Some normalised)
       else Ok None
 
-  /// Align a paginated API stream against a CSV delta stream and produce commands.
-  /// Permissive policy: CSV-only row → error; API-only row → skip.
-  let deltasToCommands<'Full, 'Delta, 'Command>
-    (getFullId   : 'Full  -> int)
-    (getDeltaId  : 'Delta -> int)
-    (entityLabel : string)
-    (diff        : 'Full -> 'Delta -> Result<'Command option, DomainError>)
-    (fulls       : AsyncSeq<Result<'Full,  DomainError>>)
-    (deltas      : AsyncSeq<Result<'Delta, DomainError>>)
-    : AsyncSeq<Result<'Command, DomainError>> =
-
-    Alignment.alignEntries
-      getFullId getDeltaId
-      (fun full delta -> Ok (Some (full, delta)))
-      (fun missing    -> Error (DomainError.Unexpected
-                                  $"Alignment failure: missing {entityLabel} for CSV id {getDeltaId missing}."))
-      (fun _          -> Ok None)
-      fulls deltas
-    |> AsyncSeq.collect (function
-        | Error err               -> AsyncSeq.singleton (Error err)
-        | Ok None                 -> AsyncSeq.empty
-        | Ok (Some (full, delta)) ->
-            match diff full delta with
-            | Ok (Some cmd) -> AsyncSeq.singleton (Ok cmd)
-            | Ok None       -> AsyncSeq.empty
-            | Error err     -> AsyncSeq.singleton (Error err))
-
   /// Core delta-update runner: fetch current state, diff, PATCH if changed.
   /// Uses integer IDs (accounts, contacts). For string-keyed entities use DeltaUpdate.run directly.
   let executeDeltaUpdates<'Delta, 'Full, 'Patch, 'Result>
@@ -440,24 +371,8 @@ module Business =
 
   let [<Literal>] UnknownSlug = "(none)"
 
-  let ofContext (context: BusinessContext) : Business =
-    Hydratable.Partial (context.key, fetch = fun () -> async {
-      let! result =
-        Http.getJson<NocfoApi.Types.Business> context.ctx.http (Endpoints.businessBySlug context.key.slug)
-      match result with
-      | Result.Ok business ->
-          return Ok (Business.Full (fullOfRaw context.key.slug business))
-      | Result.Error httpErr ->
-          return Error (DomainError.Http httpErr)
-    })
-
   let ofRaw (raw: NocfoApi.Types.Business) : Business =
     Business.Full (fullOfRaw UnknownSlug raw)
-
-  let hydrate (business: Business) : Async<Result<Business, DomainError>> =
-    match business with
-    | Full _ -> async.Return (Ok business)
-    | Partial (key, fetch) -> fetch ()
 
   let fetchBySlug (context: AccountingContext) (slug: string) : Async<Result<BusinessFull, DomainError>> =
     async {
@@ -513,50 +428,8 @@ module Account =
   let ofRow (context: BusinessContext) (row: AccountRow) : Account =
     Hydratable.Partial (row, fetch = mkFetch context (row.id.ToString()))
 
-  let hydrate (acc: Account) : Async<Result<Account, DomainError>> =
-    match acc with
-    | Full _ -> async.Return (Ok acc)
-    | Partial (_row, fetch) -> fetch ()
-
-  let inline classify< ^Account when ^Account : (member ``type`` : Type92dEnum option) >
-    (account: ^Account ) : AccountClass option =
-    match account.``type`` with
-    | Some Type92dEnum.ASS         -> Some Asset
-    | Some Type92dEnum.ASS_DEP     -> Some Asset
-    | Some Type92dEnum.ASS_VAT     -> Some Asset
-    | Some Type92dEnum.ASS_REC     -> Some Asset
-    | Some Type92dEnum.ASS_PAY     -> Some Asset
-    | Some Type92dEnum.ASS_DUE     -> Some Asset
-    | Some Type92dEnum.LIA         -> Some Liability
-    | Some Type92dEnum.LIA_EQU     -> Some Liability
-    | Some Type92dEnum.LIA_PRE     -> Some Liability
-    | Some Type92dEnum.LIA_DUE     -> Some Liability
-    | Some Type92dEnum.LIA_DEB     -> Some Liability
-    | Some Type92dEnum.LIA_ACC     -> Some Liability
-    | Some Type92dEnum.LIA_VAT     -> Some Liability
-    | Some Type92dEnum.REV         -> Some Income
-    | Some Type92dEnum.REV_SAL     -> Some Income
-    | Some Type92dEnum.REV_NO      -> Some Income
-    | Some Type92dEnum.EXP         -> Some Expense
-    | Some Type92dEnum.EXP_DEP     -> Some Expense
-    | Some Type92dEnum.EXP_NO      -> Some Expense
-    | Some Type92dEnum.EXP_50      -> Some Expense
-    | Some Type92dEnum.EXP_TAX     -> Some Expense
-    | Some Type92dEnum.EXP_TAX_PRE -> Some Expense
-    | None  -> None
-
   let diffToPatch : AccountFull -> AccountDelta -> Result<PatchedAccountRequest option, DomainError> =
     EntityOps.diffToPatch "account" (fun a -> a.id) (fun d -> d.id) (fun d -> d.patch)
-
-  let diffAccount (full: AccountFull) (delta: AccountDelta) : Result<AccountCommand option, DomainError> =
-    diffToPatch full delta
-    |> Result.map (Option.map (fun patch -> UpdateAccount { id = delta.id; patch = patch }))
-
-  let deltasToCommands
-    (accounts : AsyncSeq<Result<AccountFull,  DomainError>>)
-    (deltas   : AsyncSeq<Result<AccountDelta, DomainError>>)
-    : AsyncSeq<Result<AccountCommand, DomainError>> =
-    EntityOps.deltasToCommands (fun (a: AccountFull) -> a.id) (fun (d: AccountDelta) -> d.id) "account" diffAccount accounts deltas
 
   let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<AccountDelta, DomainError>>) =
     EntityOps.executeDeltaUpdates
@@ -587,11 +460,6 @@ module Document =
   let ofRaw (raw: DocumentFull) : Document =
     Hydratable.Full raw
 
-  let hydrate (doc: Document) : Async<Result<Document, DomainError>> =
-    match doc with
-    | Full _ -> async.Return (Ok doc)
-    | Partial (_row, fetch) -> fetch ()
-
   let private missingDocumentError (id: int) =
     DomainError.Unexpected $"Alignment failure: missing document for CSV id {id}."
 
@@ -615,25 +483,10 @@ module Contact =
   let ofRaw (raw: ContactFull) : Contact =
     Hydratable.Full raw
 
-  let hydrate (contact: Contact) : Async<Result<Contact, DomainError>> =
-    match contact with
-    | Full _ -> async.Return (Ok contact)
-    | Partial (_row, fetch) -> fetch ()
-
   let fetchFull = EntityOps.fetchById Endpoints.contactById missingContactError
 
   let diffToPatch : ContactFull -> ContactDelta -> Result<PatchedContactRequest option, DomainError> =
     EntityOps.diffToPatch "contact" (fun c -> c.id) (fun d -> d.id) (fun d -> d.patch)
-
-  let diffContact (full: ContactFull) (delta: ContactDelta) : Result<ContactCommand option, DomainError> =
-    diffToPatch full delta
-    |> Result.map (Option.map (fun patch -> UpdateContact { id = delta.id; patch = patch }))
-
-  let deltasToCommands
-    (contacts : AsyncSeq<Result<ContactFull,  DomainError>>)
-    (deltas   : AsyncSeq<Result<ContactDelta, DomainError>>)
-    : AsyncSeq<Result<ContactCommand, DomainError>> =
-    EntityOps.deltasToCommands (fun (c: ContactFull) -> c.id) (fun (d: ContactDelta) -> d.id) "contact" diffContact contacts deltas
 
   let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<ContactDelta, DomainError>>) =
     EntityOps.executeDeltaUpdates
@@ -762,10 +615,6 @@ module Streams =
           sprintf "POST %s %s"
             (Endpoints.accountsBySlug context.key.slug)
             (serializeUntyped payload)
-      | AccountCommand.UpdateAccount delta ->
-          sprintf "PATCH %s %s"
-            (Endpoints.accountById context.key.slug (string delta.id))
-            (serializeUntyped delta.patch)
       | AccountCommand.DeleteAccount id ->
           sprintf "DELETE %s" (Endpoints.accountById context.key.slug (string id))
 
@@ -780,11 +629,6 @@ module Streams =
             Http.postJson<NocfoApi.Types.AccountRequest, AccountFull>
               context.ctx.http (Endpoints.accountsBySlug context.key.slug) req
             |> AsyncResult.map AccountCreated
-      | AccountCommand.UpdateAccount delta ->
-          fun () ->
-            Http.patchJson<PatchedAccountRequest, AccountFull>
-              context.ctx.http (Endpoints.accountById context.key.slug (string delta.id)) delta.patch
-            |> AsyncResult.map AccountUpdated
       | AccountCommand.DeleteAccount id ->
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.accountById context.key.slug (string id))
@@ -802,10 +646,6 @@ module Streams =
           sprintf "POST %s %s"
             (Endpoints.documentsBySlug context.key.slug)
             (serializeUntyped payload)
-      | DocumentCommand.UpdateDocument delta ->
-          sprintf "PATCH %s %s"
-            (Endpoints.documentById context.key.slug (string delta.id))
-            (serializeUntyped delta.patch)
       | DocumentCommand.DeleteDocument id ->
           sprintf "DELETE %s" (Endpoints.documentById context.key.slug (string id))
 
@@ -815,11 +655,6 @@ module Streams =
             Http.postJson<DocumentCreatePayload, DocumentFull>
               context.ctx.http (Endpoints.documentsBySlug context.key.slug) payload
             |> AsyncResult.map DocumentCreated
-      | DocumentCommand.UpdateDocument delta ->
-          fun () ->
-            Http.patchJson<NocfoApi.Types.PatchedDocumentInstanceRequest, DocumentFull>
-              context.ctx.http (Endpoints.documentById context.key.slug (string delta.id)) delta.patch
-            |> AsyncResult.map DocumentUpdated
       | DocumentCommand.DeleteDocument id ->
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.documentById context.key.slug (string id))
@@ -837,10 +672,6 @@ module Streams =
           sprintf "POST %s %s"
             (Endpoints.contactsBySlug context.key.slug)
             (serializeUntyped payload)
-      | ContactCommand.UpdateContact delta ->
-          sprintf "PATCH %s %s"
-            (Endpoints.contactById context.key.slug (string delta.id))
-            (serializeUntyped delta.patch)
       | ContactCommand.DeleteContact id ->
           sprintf "DELETE %s" (Endpoints.contactById context.key.slug (string id))
 
@@ -857,11 +688,6 @@ module Streams =
             Http.postJson<NocfoApi.Types.ContactRequest, ContactFull>
               context.ctx.http (Endpoints.contactsBySlug context.key.slug) req
             |> AsyncResult.map ContactCreated
-      | ContactCommand.UpdateContact delta ->
-          fun () ->
-            Http.patchJson<PatchedContactRequest, ContactFull>
-              context.ctx.http (Endpoints.contactById context.key.slug (string delta.id)) delta.patch
-            |> AsyncResult.map ContactUpdated
       | ContactCommand.DeleteContact id ->
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.contactById context.key.slug (string id))
