@@ -139,6 +139,11 @@ let ``A record that does not declare a length is rejected`` () =
     test <@ match result with Error (DomainError.BadData _) -> true | _ -> false @>
 
 [<Fact>]
+let ``A record whose declared length cannot hold its own header is rejected`` () =
+    let result = Tito.read TitoCharset.Auto (bytes "T00001")
+    test <@ match result with Error (DomainError.BadData _) -> true | _ -> false @>
+
+[<Fact>]
 let ``A record shorter than it declares is rejected`` () =
     let result = Tito.read TitoCharset.Auto (bytes (file [ record "40" 50 [ 6, "260102" ] |> fun r -> r.Substring(0, 20) ]))
     test <@ match result with Error (DomainError.BadData _) -> true | _ -> false @>

@@ -210,7 +210,10 @@ module Tito =
             Error (DomainError.BadData
                      $"Record at offset {position} does not declare a length: '{text.Substring(position, 6)}'")
         | true, length ->
-            if position + length > text.Length then
+            if length < 6 then
+              Error (DomainError.BadData
+                       $"Record at offset {position} declares length {length}, shorter than its own header.")
+            elif position + length > text.Length then
               Error (DomainError.BadData
                        $"Record at offset {position} declares length {length} but the file ends after {text.Length - position} characters.")
             else
