@@ -42,7 +42,7 @@ type TitoTransaction =
 type TitoDayBalance =
   { date: DateOnly
     balance: decimal
-    available: decimal }
+    available: decimal option }
 
 type TitoRecord =
   | Header of TitoHeader
@@ -62,9 +62,10 @@ type TitoStatement =
 /// Reader for the Finnish machine-readable bank statement (TITO, "Konekielinen tiliote"),
 /// which Nordea delivers with an `.nda` extension.
 ///
-/// The record layouts below are reverse-engineered from one Nordea file, not from the
-/// Finanssiala specification. Every field decodes sensibly and each layout sums to the record's
-/// declared length, but they should be checked against the published spec before being trusted.
+/// The record layouts below were reverse-engineered from one Nordea file and then verified
+/// field by field against the Finanssiala specification, "Konekielinen tiliote, Palvelukuvaus"
+/// v3.3 (20.8.2007), §3.4. Only the fields this tool consumes are decoded; T80/T81
+/// notification records and the remaining record types are skipped as `Other`.
 module Tito =
 
   /// SFS 4017 puts Finnish letters where ASCII has brackets and braces.
@@ -114,6 +115,9 @@ module Tito =
   /// A date the bank did not set comes through as zeroes or as blanks.
   let private optionalDate (name: string) (text: string) : Result<DateOnly option, DomainError> =
     if text.Trim('0') = "" then Ok None else date name text |> Result.map Some
+
+  let private optionalAmount (name: string) (text: string) : Result<decimal option, DomainError> =
+    if text = "" then Ok None else amount name text |> Result.map Some
 
   let private headerLayout =
     [ { Name = "account";          Offset =   9; Width = 14 }
@@ -178,7 +182,7 @@ module Tito =
     let fields = slice dayBalanceLayout line
     date "date" fields.["date"] |> Result.bind (fun value ->
     amount "balance" fields.["balance"] |> Result.bind (fun balance ->
-    amount "available" fields.["available"] |> Result.map (fun available ->
+    optionalAmount "available" fields.["available"] |> Result.map (fun available ->
       DayBalance { date = value; balance = balance; available = available })))
 
   let private parseRecord (line: string) : Result<TitoRecord, DomainError> =

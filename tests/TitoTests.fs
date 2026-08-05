@@ -122,6 +122,13 @@ let ``A T11 detail attaches to the transaction it follows`` () =
     | other -> failwithf "Expected one statement, got %A" other
 
 [<Fact>]
+let ``An available balance the bank left blank decodes as None`` () =
+    // The spec (§3.4.5) marks the available balance as optional.
+    let text = file [ header "10963000000001" 0M; record "40" 50 [ 6, "260102"; 12, cents 11M ] ]
+    let result = Tito.read TitoCharset.Auto (bytes text) |> Result.map (fun s -> s.Head.day_balances)
+    test <@ result = Ok [ { date = DateOnly(2026, 1, 2); balance = 11M; available = None } ] @>
+
+[<Fact>]
 let ``A value date the bank left unset decodes as None`` () =
     let text = file [ header "10963000000001" 0M; transaction "260102" "000000" 10M "Palkka" ]
     let result = Tito.read TitoCharset.Auto (bytes text)
@@ -172,7 +179,7 @@ let private twoAccounts =
 let ``A file with one account needs no selector`` () =
     let statements = Tito.read TitoCharset.Auto (bytes (file [ header "10963000000001" 0M; dayBalance "260102" 11M ]))
     let result = statements |> Result.bind (Tito.dayBalances None)
-    test <@ result = Ok [ { date = DateOnly(2026, 1, 2); balance = 11M; available = 11M } ] @>
+    test <@ result = Ok [ { date = DateOnly(2026, 1, 2); balance = 11M; available = Some 11M } ] @>
 
 [<Fact>]
 let ``A file with several accounts requires a selector`` () =
