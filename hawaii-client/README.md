@@ -87,7 +87,7 @@ against a live NoCFO environment.
 - `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
   `Streams.executeDocumentCommands` interpret command streams and turn them into HTTP API calls.
 - `Reports.fs` holds the rolling balance (`Balance`), the daily comparison (`Reconcile`) and the sources they read (`BalanceSource`); its folds are pure, so the CLI only supplies the streams.
-- `Tito.fs` reads the Finnish machine-readable bank statement (`.nda`) into records; the layouts are data, reverse-engineered from one Nordea file.
+- `Tito.fs` reads the Finnish machine-readable bank statement (`.nda`) into records; the layouts are data, verified against the Finanssiala "Konekielinen tiliote" specification v3.3.
 - `Csv.fs` plus `CsvHelper.fs` provide the generic CSV mapping used by both tests and CLI commands.
 
 Use `Domain-design.md` for the higher-level rationale before touching alignment logic or hydration semantics.

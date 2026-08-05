@@ -188,7 +188,7 @@ Covered by two cases in `tests/DomainDiffTests.fs` (empty `identifiers`; absent 
 
 ---
 
-## D5 — `AsyncSeq.tryHead` buffers the entire stream
+## D5 — `AsyncSeq.tryHead` buffers the entire stream — **FIXED**
 
 **Severity: medium.** [AsyncSeq.fs:27](hawaii-client/src/AsyncSeq.fs#L27) — already marked
 `XXX: Replace with a lazy version`.
@@ -199,6 +199,8 @@ before it can start work, defeating the repo's central "never buffer" rule.
 
 **Fix**: `let tryHead (s: AsyncSeq<'T>) = FSharp.Control.AsyncSeq.tryFirst s`. The shadowing
 `liftAsync`/`tryHead` pair then disappears.
+
+**Fixed** exactly as above; `BusinessResolver.resolve` now stops paging at the first match.
 
 ---
 

@@ -53,7 +53,6 @@ directories in this repo, despite what older docs and the README examples may im
 - `Streams.fs` provides `alignByKey`, `streamPaginated`, `streamChanges`, `streamPatches`, `streamCreates`
   (the last two are currently unused).
 - Use `AsyncSeq` everywhere; never buffer full lists into memory.
-  Note `NocfoClient.AsyncSeq.tryHead` violates this today — see `TASK-defects.md` D5.
 - `Streams.alignByKey` requires **both** inputs to be sorted by the *same* comparison as the key
   function it is given; it raises `StreamOrderException` if they are not. Do not use it against
   a stream whose order is not known — the API documents no ordering for its list endpoints.
@@ -186,18 +185,11 @@ F# requires declaration-before-use ordering:
 
 ## Known Limitations & TODOs (as of August 2026)
 
-- **Error handling is the weakest area.** Every failure path except configuration ends in an
-  unhandled exception (exit 134 + .NET stack trace). See `TASK-defects.md`.
-- Transport failures (connection refused, DNS, timeout) are not modelled in `HttpError` and are
-  therefore never retried.
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
-- `hawaii-client/src/hawaii-client.csproj` is an empty C# project (no `.cs` files) left over from an
-  earlier design. It is still referenced by the `.fsproj` and listed in `nocfo.slnx`.
 - API coverage: businesses, accounts, contacts, documents, and the ledger report. Not covered:
   entries, periods, other reports, VAT, tags, files, invoicing. See `ROADMAP.md` Phase 5.
-- The TITO record layouts in `Tito.fs` are reverse-engineered from one Nordea statement, not from
-  the Finanssiala specification. They decode that file correctly but have not been verified
-  against the standard.
+- Dead code flagged in `TASK-defects.md` D7 (test-only diff/command machinery, unused stream
+  helpers) awaits a decision on whether the stream-alignment update path stays.
 
 ---
 
@@ -225,7 +217,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 129 tests
+dotnet test tests     # 131 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).

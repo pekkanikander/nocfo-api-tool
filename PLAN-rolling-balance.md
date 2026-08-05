@@ -587,3 +587,7 @@ Steps 1–5 are implemented; steps 6 and 7 are not.
 4. Multi-currency is not handled: `T00.currency` is decoded but not checked.
 5. The Finanssiala specification was not available; the layouts remain reverse-engineered from one
    Nordea file and are documented as such in `Tito.fs` and `CLAUDE.md`.
+   *(Resolved 2026-08-05: the spec — "Konekielinen tiliote, Palvelukuvaus" v3.3, 20.8.2007,
+   finanssiala.fi — was fetched and every T00/T10/T11/T40 field offset matches §3.4. The one
+   deviation found: the spec marks `T40` "Käytettävissä oleva saldo" optional, so
+   `TitoDayBalance.available` became `decimal option`.)*
