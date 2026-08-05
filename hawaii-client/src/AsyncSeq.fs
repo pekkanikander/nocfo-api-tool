@@ -23,13 +23,7 @@ module AsyncResult =
     let existsOk p    = liftAsync (Result.existsOk p)
 
 module AsyncSeq =
-    /// XXX: Replace with a lazy version, replacing this eager one
-    let inline liftAsync (hof: 'T seq -> 'T option) (ar: AsyncSeq<'T>) : Async<'T option> =
-        async {
-            let! result = AsyncSeq.toListAsync ar
-            return hof result
-        }
-    let inline tryHead (s: AsyncSeq<'T>) : Async<'T option> = liftAsync (Seq.tryHead) s
+    let tryHead (s: AsyncSeq<'T>) : Async<'T option> = FSharp.Control.AsyncSeq.tryFirst s
 
     /// Filter AsyncSeq<Result<_,_>> values, keeping only the Ok values that satisfy the predicate.
     /// Errors pass through untouched so that the consumer can decide how to handle them.
