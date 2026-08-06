@@ -27,25 +27,14 @@ let ``A difference on a shared day is reported`` () =
                          difference = -2M; status = "differs" } ] @>
 
 [<Fact>]
-let ``A balance holds until the side next moves`` () =
-    // The right side does not move on the 2nd, so its balance from the 1st still applies.
-    let result = statuses 0M [ "2025-01-01", 10M; "2025-01-02", 10M ] [ "2025-01-01", 10M ]
-    test <@ result = [ "2025-01-01", "ok"; "2025-01-02", "ok" ] @>
-
-[<Fact>]
-let ``A held balance still catches a difference`` () =
+let ``A day only the left side has is left-only, never a difference`` () =
     let result = statuses 0M [ "2025-01-01", 10M; "2025-01-02", 15M ] [ "2025-01-01", 10M ]
-    test <@ result = [ "2025-01-01", "ok"; "2025-01-02", "differs" ] @>
+    test <@ result = [ "2025-01-01", "ok"; "2025-01-02", "left-only" ] @>
 
 [<Fact>]
-let ``Days before the other side has any balance are not compared`` () =
-    let result = statuses 0M [ "2025-01-01", 10M; "2025-01-03", 10M ] [ "2025-01-03", 10M ]
-    test <@ result = [ "2025-01-01", "left-only"; "2025-01-03", "ok" ] @>
-
-[<Fact>]
-let ``A day only the right side has is compared against the left's last balance`` () =
+let ``A day only the right side has is right-only, never a difference`` () =
     let result = statuses 0M [ "2025-01-01", 10M ] [ "2025-01-01", 10M; "2025-01-02", 11M ]
-    test <@ result = [ "2025-01-01", "ok"; "2025-01-02", "differs" ] @>
+    test <@ result = [ "2025-01-01", "ok"; "2025-01-02", "right-only" ] @>
 
 [<Fact>]
 let ``A difference within the tolerance reconciles`` () =

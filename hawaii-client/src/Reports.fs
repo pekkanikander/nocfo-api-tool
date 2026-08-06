@@ -112,9 +112,9 @@ module Balance =
 
 module Reconcile =
 
-  /// Compares two daily-balance streams day by day. A balance holds until it next changes, so a
-  /// date present on only one side is still compared against the other side's last known
-  /// balance; `left-only` and `right-only` mark only the days before a side has any balance.
+  /// Compares two daily-balance streams day by day. Only days both sides report a balance for
+  /// are compared; a day present on one side alone is `left-only` or `right-only`, never a
+  /// difference.
   let daily (tolerance: decimal) (left: AsyncSeq<DailyBalanceRow>) (right: AsyncSeq<DailyBalanceRow>)
     : AsyncSeq<ReconcileRow> =
     let aligned =
@@ -124,34 +124,18 @@ module Reconcile =
         (Balance.requireAscending "left" left)
         (Balance.requireAscending "right" right)
 
-    asyncSeq {
-      let mutable lastLeft  : decimal option = None
-      let mutable lastRight : decimal option = None
-
-      for alignment in aligned do
-        let date, leftBalance, rightBalance =
-          match alignment with
-          | Aligned (l, r)     -> l.date, Some l.balance, Some r.balance
-          | MissingRight l     -> l.date, Some l.balance, lastRight
-          | MissingLeft r      -> r.date, lastLeft, Some r.balance
-
-        lastLeft  <- leftBalance  |> Option.orElse lastLeft
-        lastRight <- rightBalance |> Option.orElse lastRight
-
-        match leftBalance, rightBalance with
-        | Some l, Some r ->
-            let difference = l - r
-            yield { date            = date
-                    left_balance    = l
-                    right_balance   = r
-                    difference      = difference
-                    status          = if abs difference <= tolerance then "ok" else "differs" }
-        | Some l, None ->
-            yield { date = date; left_balance = l; right_balance = 0M; difference = 0M; status = "left-only" }
-        | None, Some r ->
-            yield { date = date; left_balance = 0M; right_balance = r; difference = 0M; status = "right-only" }
-        | None, None -> ()
-    }
+    aligned |> AsyncSeq.map (function
+      | Aligned (l, r) ->
+          let difference = l.balance - r.balance
+          { date            = l.date
+            left_balance    = l.balance
+            right_balance   = r.balance
+            difference      = difference
+            status          = if abs difference <= tolerance then "ok" else "differs" }
+      | MissingRight l ->
+          { date = l.date; left_balance = l.balance; right_balance = 0M; difference = 0M; status = "left-only" }
+      | MissingLeft r ->
+          { date = r.date; left_balance = 0M; right_balance = r.balance; difference = 0M; status = "right-only" })
 
 /// Where a daily-balance stream comes from: the server's ledger, a bank statement, or a CSV
 /// that some earlier command wrote.
