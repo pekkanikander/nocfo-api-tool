@@ -1,5 +1,7 @@
 # nocfo-api-tool
 
+[![CI](https://github.com/pekkanikander/nocfo-api-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/pekkanikander/nocfo-api-tool/actions/workflows/ci.yml)
+
 An F# CLI tool and client library for the [NoCFO](https://nocfo.io/) Finnish accounting API.
 
 > **Bootstrapped** from [nocfo-api-onboard](https://github.com/pekkanikander/nocfo-api-onboard),

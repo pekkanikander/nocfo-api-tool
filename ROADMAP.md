@@ -49,15 +49,20 @@ The pattern is settled; this roadmap fills in the gaps that were consciously def
 ## Phase 5 — Broader API Coverage (when the above is stable)
 
 The API has grown to 73 paths / 159 schemas. Currently covered: businesses, accounts,
-contacts, documents (list/update). Not yet covered:
+contacts, documents (full CRUD), `map accounts`, and the ledger report via
+`balance` / `reconcile` (`Reports.fs`, with TITO and CSV comparison sources).
+Not yet covered:
 
-- Transactions (read-only streaming, useful for reports)
+- The other seven `/report/` endpoints (journal, balance sheet, income statement,
+  equity changes, VAT) — journal is the API's transaction stream
 - Accounting periods
-- VAT returns
+- Small entities: tags, identifiers, headers, vat_period
 - Attachments (multipart upload — needs special handling)
-- Balance sheet / P&L report folds (a `Reports.fs` stub exists)
+- Document actions (lock, flag, copy, relations)
+- The invoicing subtree (invoices, products, purchase invoices)
 
 Prioritise based on user need, not completeness for its own sake.
+See `PLAN-phase-5.md` for the worked plan.
 
 ---
 
