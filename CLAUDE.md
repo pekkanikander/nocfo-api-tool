@@ -141,6 +141,7 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 | `map` | accounts (source → target env, keyed on account number) |
 | `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
 | `reconcile` | daily balances of two sources compared day by day |
+| `statement` | transactions of a TITO bank statement as CSV (local file, no API) |
 
 ```bash
 dotnet run --project tools -- list businesses --fields "id,name,slug"

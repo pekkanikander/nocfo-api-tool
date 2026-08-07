@@ -62,8 +62,8 @@ run_list_case \
 # is where run_list_case put the previous case's stdout.
 run_list_case \
   "reconcile ledger against own daily output" \
-  "date,left_balance,right_balance,difference,status" \
-  "date,left_balance,right_balance,difference,status" \
+  "date,left_balance,right_balance,difference,change,status" \
+  "date,left_balance,right_balance,difference,change,status" \
   "" \
   reconcile -b "${TEST_BUSINESS_SLUG}" \
     --from "${TEST_LEDGER_FROM}" --to "${TEST_LEDGER_TO}" -a "${TEST_LEDGER_ACCOUNT}" \

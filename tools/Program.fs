@@ -1,4 +1,5 @@
 open System
+open System.Globalization
 open System.IO
 open Argu
 open FSharp.Control
@@ -675,6 +676,48 @@ let reconcile (toolContext: ToolContext) (args: ParseResults<ReconcileArgs>) =
             return ExitCodes.EX_OK
     }
 
+let private parseDay (flag: string) (text: string option) =
+    match text with
+    | None -> Ok None
+    | Some value ->
+        match DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None) with
+        | true, day -> Ok (Some day)
+        | _ -> Error (DomainError.Invalid $"{flag} is not a date (YYYY-MM-DD): '{value}'")
+
+let statement (output: TextWriter) (args: ParseResults<StatementArgs>) =
+    async {
+        let fields = args.GetResult(StatementArgs.Fields, defaultValue = [])
+        let source =
+            match (args.GetResult StatementArgs.Source).Split('#') with
+            | [| path |]          -> Ok (path, None)
+            | [| path; account |] -> Ok (path, Some account)
+            | _ -> Error (DomainError.Invalid "A statement source takes at most one '#account' selector.")
+
+        match source,
+              parseCharset (args.TryGetResult StatementArgs.Charset),
+              parseDay "--from" (args.TryGetResult StatementArgs.DateFrom),
+              parseDay "--to" (args.TryGetResult StatementArgs.DateTo) with
+        | Error error, _, _, _
+        | _, Error error, _, _
+        | _, _, Error error, _
+        | _, _, _, Error error -> return mapDomainErrorToExitCode error
+        | Ok (path, account), Ok charset, Ok dateFrom, Ok dateTo ->
+
+        let rows =
+            File.ReadAllBytes path
+            |> Nocfo.Tito.read charset
+            |> Result.bind (Nocfo.Tito.transactions account)
+            |> Result.map (Statement.rows dateFrom dateTo)
+        match rows with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok rows ->
+            do!
+                AsyncSeq.ofSeq rows
+                |> Nocfo.Csv.writeCsvGeneric<StatementRow> output (Some fields)
+                |> AsyncSeq.iter ignore
+            return ExitCodes.EX_OK
+    }
+
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =
         parser.ParseCommandLine(argv, raiseOnUsage = true)
@@ -698,20 +741,29 @@ let private run (parser: ArgumentParser<CliArgs>) argv =
     let dryRun  = results.Contains(CliArgs.DryRun)
     let verbose = results.Contains(CliArgs.Verbose)
     let profile = results.TryGetResult CliArgs.Profile
-    let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
 
-    match subcommand with
-    | CliArgs.List _   -> list   toolContext (results.GetResult List)
-    | CliArgs.Update _ -> update toolContext (results.GetResult Update)
-    | CliArgs.Delete _ -> delete toolContext (results.GetResult Delete)
-    | CliArgs.Map _    -> map    toolContext (results.GetResult Map)
-    | CliArgs.Create _ -> create toolContext (results.GetResult Create)
-    | CliArgs.Balance _   -> balance   toolContext (results.GetResult CliArgs.Balance)
-    | CliArgs.Reconcile _ -> reconcile toolContext (results.GetResult CliArgs.Reconcile)
-    | _ ->
-        eprintfn "%s" (parser.PrintUsage())
-        async.Return ExitCodes.EX_USAGE
-    |> Async.RunSynchronously
+    let command =
+        match subcommand with
+        | CliArgs.Statement _ ->
+            // Reads a local file only; needs no API configuration.
+            statement output (results.GetResult CliArgs.Statement)
+        | _ ->
+
+        let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
+
+        match subcommand with
+        | CliArgs.List _   -> list   toolContext (results.GetResult List)
+        | CliArgs.Update _ -> update toolContext (results.GetResult Update)
+        | CliArgs.Delete _ -> delete toolContext (results.GetResult Delete)
+        | CliArgs.Map _    -> map    toolContext (results.GetResult Map)
+        | CliArgs.Create _ -> create toolContext (results.GetResult Create)
+        | CliArgs.Balance _   -> balance   toolContext (results.GetResult CliArgs.Balance)
+        | CliArgs.Reconcile _ -> reconcile toolContext (results.GetResult CliArgs.Reconcile)
+        | _ ->
+            eprintfn "%s" (parser.PrintUsage())
+            async.Return ExitCodes.EX_USAGE
+
+    Async.RunSynchronously command
 
 /// Reports the failure on stderr (usage on stdout) and yields the sysexits code for it.
 let exitCodeForException (ex: exn) =

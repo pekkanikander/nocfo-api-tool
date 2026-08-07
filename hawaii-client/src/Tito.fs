@@ -273,14 +273,14 @@ module Tito =
   let read (charset: TitoCharset) (bytes: byte[]) : Result<TitoStatement list, DomainError> =
     decode charset bytes |> records |> Result.bind statements
 
-  /// The day balances of one bank account, in date order: the spec does not order the statements
+  /// The statements of one bank account, in period order: the spec does not order the statements
   /// within a file (Nordea emits an annual download latest month first), so the selected
-  /// statements are sorted by period; the balances within each statement are kept as parsed.
+  /// statements are sorted by period; the records within each statement are kept as parsed.
   /// A bookkeeping account number cannot be matched against a bank account number, so a file
   /// carrying several accounts has to be told which one is meant; `account` matches the tail of
   /// the account number or of the IBAN.
-  let dayBalances (account: string option) (statements: TitoStatement list)
-    : Result<TitoDayBalance list, DomainError> =
+  let private select (account: string option) (statements: TitoStatement list)
+    : Result<TitoStatement list, DomainError> =
     let matches (header: TitoHeader) =
       match account with
       | None -> true
@@ -298,11 +298,28 @@ module Tito =
         Error (DomainError.Invalid
                  ("No statement in the file is for account " + defaultArg account "(any)" +
                   ". The file carries: " + String.Join(", ", available)))
-    | [ _ ] ->
-        Ok (selected
-            |> List.sortBy (fun statement -> statement.header.period_from)
-            |> List.collect (fun statement -> statement.day_balances))
+    | [ _ ] -> Ok (selected |> List.sortBy (fun statement -> statement.header.period_from))
     | several ->
         Error (DomainError.Invalid
                  ("The statement file carries several bank accounts (" + String.Join(", ", several) +
                   "). Select one by appending '#<account>' to the source, e.g. nda:statement.nda#" + List.head several))
+
+  /// The day balances of one bank account, in date order.
+  let dayBalances (account: string option) (statements: TitoStatement list)
+    : Result<TitoDayBalance list, DomainError> =
+    select account statements
+    |> Result.map (List.collect (fun statement -> statement.day_balances))
+
+  /// The transactions of one bank account, in date order. A service-charge aggregate
+  /// (kuittikoodi 'E', spec §3.4.3) is followed by records that itemise it, repeating its
+  /// transaction number; only the aggregate moves the balance, so the itemisations are dropped.
+  let transactions (account: string option) (statements: TitoStatement list)
+    : Result<TitoTransaction list, DomainError> =
+    let withoutItemisations (transactions: TitoTransaction list) =
+      transactions
+      |> List.fold (fun (kept, previous) transaction ->
+           if previous = Some transaction.number then kept, previous
+           else transaction :: kept, Some transaction.number) ([], None)
+      |> fun (kept, _) -> List.rev kept
+    select account statements
+    |> Result.map (List.collect (fun statement -> withoutItemisations statement.transactions))

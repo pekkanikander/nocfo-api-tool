@@ -26,7 +26,19 @@ let ``Identical balances reconcile`` () =
 let ``A difference on a shared day is reported`` () =
     let result = reconcile 0M [ "2025-01-01", 10M ] [ "2025-01-01", 12M ]
     test <@ result = [ { date = "2025-01-01"; left_balance = 10M; right_balance = 12M
-                         difference = -2M; status = "differs" } ] @>
+                         difference = -2M; change = -2M; status = "differs" } ] @>
+
+[<Fact>]
+let ``The change column is the movement of the difference since the previous shared day`` () =
+    let result =
+        reconcile 0M
+            [ "2025-01-01", 10M; "2025-01-02", 12M; "2025-01-03", 20M; "2025-01-04", 20M ]
+            [ "2025-01-01", 10M;                    "2025-01-03", 15M; "2025-01-04", 25M ]
+        |> List.map (fun row -> row.date, row.difference, row.change)
+    test <@ result = [ "2025-01-01", 0M, 0M
+                       "2025-01-02", 0M, 0M      // left-only: no comparison, no movement
+                       "2025-01-03", 5M, 5M
+                       "2025-01-04", -5M, -10M ] @>
 
 [<Fact>]
 let ``A day only the left side has is left-only, never a difference`` () =
@@ -46,6 +58,21 @@ let ``A difference within the tolerance reconciles`` () =
 [<Fact>]
 let ``Balances out of date order are rejected`` () =
     raises<StreamOrderException> <@ reconcile 0M [ "2025-01-02", 10M; "2025-01-01", 10M ] [] @>
+
+[<Fact>]
+let ``A balance source is narrowed to the period asked for`` () =
+    let csvPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".csv")
+    try
+        File.WriteAllText(csvPath, "date,balance\n2026-01-05,10\n2026-02-03,20\n2026-03-01,30\n")
+        let query =
+            { dateFrom = Some "2026-02-01"; dateTo = Some "2026-02-28"
+              accounts = Set.empty; charset = TitoCharset.Auto }
+        let result =
+            BalanceSource.parse $"csv:{csvPath}"
+            |> Result.bind (fun source -> BalanceSource.read None query source |> Async.RunSynchronously)
+        test <@ result = Ok [ { date = "2026-02-03"; balance = 20M } ] @>
+    finally
+        File.Delete csvPath
 
 [<Fact>]
 let ``A reverse-order bank statement reconciles against a daily-balance CSV`` () =

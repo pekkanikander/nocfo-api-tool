@@ -112,6 +112,21 @@ type ReconcileArgs =
             | Tolerance _  -> "Largest difference still reported as 'ok' (default 0)."
             | Fields _     -> "Comma-separated list of columns to emit (default: all)."
 
+type StatementArgs =
+    | [< MainCommand; Mandatory >]                Source of source: string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    |                                             Charset of charset: string
+    | [< AltCommandLine("-f") >]                  Fields of fields: string list
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Source _   -> "Bank statement to dump: <path>[#<account>]."
+            | DateFrom _ -> "Earliest booking date to emit (YYYY-MM-DD)."
+            | DateTo _   -> "Latest booking date to emit (YYYY-MM-DD)."
+            | Charset _  -> "Character set of the statement: auto (default), ascii-fi, latin1 or utf8."
+            | Fields _   -> "Comma-separated list of columns to emit (default: all)."
+
 [<RequireSubcommand>]
 type CliArgs =
     | [< AltCommandLine("-o"); Inherit >]         Out     of outPath: string
@@ -126,6 +141,7 @@ type CliArgs =
     | [< NoPrefix; SubCommand >]                  Create  of ParseResults<CreateEntitiesArgs>
     | [< NoPrefix; SubCommand >]                  Balance of ParseResults<BalanceArgs>
     | [< NoPrefix; SubCommand >]                  Reconcile of ParseResults<ReconcileArgs>
+    | [< NoPrefix; SubCommand >]                  Statement of ParseResults<StatementArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
@@ -141,3 +157,4 @@ type CliArgs =
             | Create _     -> "Create entities from CSV input."
             | Balance _    -> "Rolling balance of an account over a period."
             | Reconcile _  -> "Compare the daily balances of two sources."
+            | Statement _  -> "Dump the transactions of a bank statement (.nda) as CSV."

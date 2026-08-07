@@ -39,6 +39,7 @@ type ReconcileRow =
     left_balance: decimal
     right_balance: decimal
     difference: decimal
+    change: decimal
     status: string }
 
 module Balance =
@@ -114,7 +115,9 @@ module Reconcile =
 
   /// Compares two daily-balance streams day by day. Only days both sides report a balance for
   /// are compared; a day present on one side alone is `left-only` or `right-only`, never a
-  /// difference.
+  /// difference. `change` is the movement of the difference since the previous shared day: on
+  /// the day the sources start to diverge it equals the net amount missing from one side, which
+  /// is what to look for in the two sources' transactions.
   let daily (tolerance: decimal) (left: AsyncSeq<DailyBalanceRow>) (right: AsyncSeq<DailyBalanceRow>)
     : AsyncSeq<ReconcileRow> =
     let aligned =
@@ -124,18 +127,52 @@ module Reconcile =
         (Balance.requireAscending "left" left)
         (Balance.requireAscending "right" right)
 
-    aligned |> AsyncSeq.map (function
-      | Aligned (l, r) ->
-          let difference = l.balance - r.balance
-          { date            = l.date
-            left_balance    = l.balance
-            right_balance   = r.balance
-            difference      = difference
-            status          = if abs difference <= tolerance then "ok" else "differs" }
-      | MissingRight l ->
-          { date = l.date; left_balance = l.balance; right_balance = 0M; difference = 0M; status = "left-only" }
-      | MissingLeft r ->
-          { date = r.date; left_balance = 0M; right_balance = r.balance; difference = 0M; status = "right-only" })
+    asyncSeq {
+      let mutable previous = 0M
+      for pair in aligned do
+        match pair with
+        | Aligned (l, r) ->
+            let difference = l.balance - r.balance
+            yield { date            = l.date
+                    left_balance    = l.balance
+                    right_balance   = r.balance
+                    difference      = difference
+                    change          = difference - previous
+                    status          = if abs difference <= tolerance then "ok" else "differs" }
+            previous <- difference
+        | MissingRight l ->
+            yield { date = l.date; left_balance = l.balance; right_balance = 0M
+                    difference = 0M; change = 0M; status = "left-only" }
+        | MissingLeft r ->
+            yield { date = r.date; left_balance = 0M; right_balance = r.balance
+                    difference = 0M; change = 0M; status = "right-only" }
+    }
+
+/// One bank-statement transaction, in the shape the `statement` verb emits as CSV.
+[<CLIMutable>]
+type StatementRow =
+  { booking_date: string
+    value_date: string option
+    amount: decimal
+    entry_text: string
+    counterparty: string }
+
+module Statement =
+
+  /// Statement transactions as CSV rows, narrowed to booking dates within the period.
+  let rows (dateFrom: DateOnly option) (dateTo: DateOnly option) (transactions: TitoTransaction list)
+    : StatementRow list =
+    let iso (date: DateOnly) = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+    transactions
+    |> List.filter (fun transaction ->
+         (dateFrom |> Option.forall (fun from -> transaction.booking_date >= from))
+         && (dateTo |> Option.forall (fun until -> transaction.booking_date <= until)))
+    |> List.map (fun transaction ->
+         { booking_date = iso transaction.booking_date
+           value_date   = transaction.value_date |> Option.map iso
+           amount       = transaction.amount
+           entry_text   = transaction.entry_text
+           counterparty = transaction.counterparty })
 
 /// Where a daily-balance stream comes from: the server's ledger, a bank statement, or a CSV
 /// that some earlier command wrote.
@@ -202,11 +239,17 @@ module BalanceSource =
       return Ok rows
     }
 
-  /// Opens a source as a daily-balance list. Every source is bounded by a statement period or a
-  /// report period, so this materialises rather than streaming.
+  /// Opens a source as a daily-balance list, narrowed to the query period: an annual bank
+  /// statement reconciled one month at a time would otherwise drown the report in one-sided
+  /// days. Every source is bounded by a statement period or a report period, so this
+  /// materialises rather than streaming.
   let read (business: BusinessContext option) (query: BalanceQuery) (source: BalanceSource)
     : Async<Result<DailyBalanceRow list, DomainError>> =
+    let inPeriod (row: DailyBalanceRow) =
+      (query.dateFrom |> Option.forall (fun from -> row.date >= from))
+      && (query.dateTo |> Option.forall (fun until -> row.date <= until))
     match source with
     | LedgerSource                -> fromLedger business query
     | NdaSource (path, account)   -> fromNda query path account
     | CsvSource path              -> fromCsv path
+    |> AsyncResult.map (List.filter inPeriod)

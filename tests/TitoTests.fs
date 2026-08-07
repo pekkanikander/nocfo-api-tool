@@ -39,18 +39,22 @@ let headerPeriod (account: string) (periodFrom: string) (periodTo: string) (open
 let private header (account: string) (openingBalance: decimal) =
     headerPeriod account "260101" "260131" openingBalance
 
-let private transaction (bookingDate: string) (valueDate: string) (amount: decimal) (text: string) =
+let private transactionAt (number: string) (receiptCode: string)
+                          (bookingDate: string) (valueDate: string) (amount: decimal) (text: string) =
     record "10" 188
-        [ 6,   "000001"
+        [ 6,   number
           12,  "260101000000000001"
           30,  bookingDate
           36,  valueDate
           49,  "700"
           52,  text
           87,  cents amount
+          106, receiptCode
           108, "Yritys Oy"
           144, "FI9876500000123"
           159, "00000000000000012345" ]
+
+let private transaction = transactionAt "000001" ""
 
 let dayBalance (date: string) (balance: decimal) =
     record "40" 50 [ 6, date; 12, cents balance; 31, cents balance ]
@@ -217,3 +221,48 @@ let ``Statements in reverse chronological order yield day balances in date order
     test <@ result = Ok [ DateOnly(2026, 1, 2), 15M
                           DateOnly(2026, 1, 5), 20M
                           DateOnly(2026, 2, 3), 30M ] @>
+
+[<Fact>]
+let ``Statements in reverse chronological order yield transactions in date order`` () =
+    let text =
+        file [ headerPeriod "10963000000001" "260201" "260228" 20M
+               transaction "260203" "260203" 10M "Helmikuu"
+               headerPeriod "10963000000001" "260101" "260131" 10M
+               transaction "260102" "260102" 5M "Tammikuu" ]
+    let result =
+        Tito.read TitoCharset.Auto (bytes text)
+        |> Result.bind (Tito.transactions None)
+        |> Result.map (List.map (fun t -> t.entry_text))
+    test <@ result = Ok [ "Tammikuu"; "Helmikuu" ] @>
+
+// ── Transactions and statement rows ───────────────────────────────────────────
+
+[<Fact>]
+let ``Records itemising a service-charge aggregate are dropped from transactions`` () =
+    // Nordea itemises the monthly service charge in records that repeat the aggregate's
+    // transaction number; only the aggregate (kuittikoodi 'E') moves the balance.
+    let text =
+        file [ header "10963000000001" 0M
+               transactionAt "000001" "E" "260703" "260703" -12.97M "Palvelumaksu"
+               transactionAt "000001" ""  "260703" "000000" -0.99M  "Palvelumaksu"
+               transactionAt "000001" ""  "260703" "000000" -4.48M  "Palvelumaksu"
+               transactionAt "000001" ""  "260703" "000000" -7.50M  "Palvelumaksu"
+               transactionAt "000002" ""  "260703" "260703" 95M     "Viitemaksu" ]
+    let result =
+        Tito.read TitoCharset.Auto (bytes text)
+        |> Result.bind (Tito.transactions None)
+        |> Result.map (List.map (fun t -> t.amount))
+    test <@ result = Ok [ -12.97M; 95M ] @>
+
+[<Fact>]
+let ``Statement rows keep only the period asked for`` () =
+    let text =
+        file [ header "10963000000001" 0M
+               transactionAt "000001" "" "260102" "260102" 5M  "Tammikuu"
+               transactionAt "000002" "" "260203" "260203" 10M "Helmikuu" ]
+    let result =
+        Tito.read TitoCharset.Auto (bytes text)
+        |> Result.bind (Tito.transactions None)
+        |> Result.map (Statement.rows (Some (DateOnly(2026, 2, 1))) None)
+    test <@ result = Ok [ { booking_date = "2026-02-03"; value_date = Some "2026-02-03"
+                            amount = 10M; entry_text = "Helmikuu"; counterparty = "Yritys Oy" } ] @>

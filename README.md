@@ -138,8 +138,37 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
      --left ledger --right "nda:statement.nda#<bank-account>"
    ```
 
-   Both sides take `ledger`, `nda:<path>[#<account>]` or `csv:<path>`; a day whose balances
-   differ by more than `--tolerance` exits `EX_DATAERR` (65).
+   Both sides take `ledger`, `nda:<path>[#<account>]` or `csv:<path>`; `--from`/`--to` bound
+   every source; a day whose balances differ by more than `--tolerance` exits `EX_DATAERR` (65).
+   The `change` column is the movement of the difference since the previous shared day: on the
+   day the sources start to diverge it equals the net amount missing from one side.
+
+13. **Dump a bank statement** as CSV to see the transactions behind a difference:
+
+   ```bash
+   dotnet run --project tools -- statement "statement.nda#<bank-account>" \
+     --from 2025-01-01 --to 2025-03-31 > bank.csv
+   ```
+
+   Emits `booking_date,value_date,amount,entry_text,counterparty`. Records itemising a
+   service-charge aggregate are dropped, so the rows sum to the statement's day balances.
+   Reads a local file only; no API configuration is needed.
+
+### Recurring Bank Reconciliation
+
+To check the books against the bank monthly or quarterly:
+
+1. Download the machine-readable statement (`.nda`) from the bank.
+2. For each ledger-account/bank-account pair, run `reconcile -b <business-id>
+   --from <first-day> --to <last-day> -a <ledger-account> --left ledger
+   --right "nda:<statement>#<bank-account>"`.
+3. Exit 0: the period reconciles; archive the `balance --daily` CSV as an offline baseline.
+4. Otherwise, for each day whose `change` is non-zero, run `statement` and `balance` over the
+   surrounding days; the entry to fix is the one whose amount matches the `change`.
+
+A day only one source moved on is reported as `left-only`/`right-only`, never as a difference,
+so a one-day booking-date offset between the books and the bank shows up as such a pair and
+needs no action.
 
 ### CLI Notes
 
@@ -155,7 +184,7 @@ and attach `nocfo-<tag>-<rid>` archives to that release.
 - Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,
   `update contacts`; `delete accounts`, `delete contacts`, `delete documents`; `create businesses`,
   `create accounts`, `create contacts`, and minimal `create documents`; plus `map accounts`,
-  `balance` and `reconcile`.
+  `balance`, `reconcile` and `statement`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,
