@@ -273,9 +273,12 @@ module Tito =
   let read (charset: TitoCharset) (bytes: byte[]) : Result<TitoStatement list, DomainError> =
     decode charset bytes |> records |> Result.bind statements
 
-  /// The day balances of one bank account, in file order. A bookkeeping account number cannot be
-  /// matched against a bank account number, so a file carrying several accounts has to be told
-  /// which one is meant; `account` matches the tail of the account number or of the IBAN.
+  /// The day balances of one bank account, in date order: the spec does not order the statements
+  /// within a file (Nordea emits an annual download latest month first), so the selected
+  /// statements are sorted by period; the balances within each statement are kept as parsed.
+  /// A bookkeeping account number cannot be matched against a bank account number, so a file
+  /// carrying several accounts has to be told which one is meant; `account` matches the tail of
+  /// the account number or of the IBAN.
   let dayBalances (account: string option) (statements: TitoStatement list)
     : Result<TitoDayBalance list, DomainError> =
     let matches (header: TitoHeader) =
@@ -295,7 +298,10 @@ module Tito =
         Error (DomainError.Invalid
                  ("No statement in the file is for account " + defaultArg account "(any)" +
                   ". The file carries: " + String.Join(", ", available)))
-    | [ _ ] -> Ok (selected |> List.collect (fun statement -> statement.day_balances))
+    | [ _ ] ->
+        Ok (selected
+            |> List.sortBy (fun statement -> statement.header.period_from)
+            |> List.collect (fun statement -> statement.day_balances))
     | several ->
         Error (DomainError.Invalid
                  ("The statement file carries several bank accounts (" + String.Join(", ", several) +

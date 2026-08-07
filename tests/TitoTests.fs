@@ -25,16 +25,19 @@ let private cents (amount: decimal) =
     let value = int64 (Math.Round(amount * 100M))
     sprintf "%c%018d" (if value < 0L then '-' else '+') (abs value)
 
-let private header (account: string) (openingBalance: decimal) =
+let headerPeriod (account: string) (periodFrom: string) (periodTo: string) (openingBalance: decimal) =
     record "00" 322
         [ 9,   account
           23,  "001"
-          26,  "260101"
-          32,  "260131"
+          26,  periodFrom
+          32,  periodTo
           65,  "251231"
           71,  cents openingBalance
           96,  "EUR"
           292, "FI1234500000" + account.Substring(account.Length - 6) ]
+
+let private header (account: string) (openingBalance: decimal) =
+    headerPeriod account "260101" "260131" openingBalance
 
 let private transaction (bookingDate: string) (valueDate: string) (amount: decimal) (text: string) =
     record "10" 188
@@ -49,12 +52,12 @@ let private transaction (bookingDate: string) (valueDate: string) (amount: decim
           144, "FI9876500000123"
           159, "00000000000000012345" ]
 
-let private dayBalance (date: string) (balance: decimal) =
+let dayBalance (date: string) (balance: decimal) =
     record "40" 50 [ 6, date; 12, cents balance; 31, cents balance ]
 
-let private file (records: string list) = String.Join("\r\n", records) + "\r\n"
+let file (records: string list) = String.Join("\r\n", records) + "\r\n"
 
-let private bytes (text: string) = Encoding.ASCII.GetBytes text
+let bytes (text: string) = Encoding.ASCII.GetBytes text
 
 // ── Character set ─────────────────────────────────────────────────────────────
 
@@ -195,3 +198,22 @@ let ``The selector matches the tail of the account number`` () =
 let ``A selector matching no account is rejected`` () =
     let result = Tito.read TitoCharset.Auto (bytes twoAccounts) |> Result.bind (Tito.dayBalances (Some "999999"))
     test <@ match result with Error (DomainError.Invalid _) -> true | _ -> false @>
+
+// ── Statement order ───────────────────────────────────────────────────────────
+
+[<Fact>]
+let ``Statements in reverse chronological order yield day balances in date order`` () =
+    // An annual Nordea download is one statement per month, latest month first.
+    let text =
+        file [ headerPeriod "10963000000001" "260201" "260228" 20M
+               dayBalance "260203" 30M
+               headerPeriod "10963000000001" "260101" "260131" 10M
+               dayBalance "260102" 15M
+               dayBalance "260105" 20M ]
+    let result =
+        Tito.read TitoCharset.Auto (bytes text)
+        |> Result.bind (Tito.dayBalances None)
+        |> Result.map (List.map (fun b -> b.date, b.balance))
+    test <@ result = Ok [ DateOnly(2026, 1, 2), 15M
+                          DateOnly(2026, 1, 5), 20M
+                          DateOnly(2026, 2, 3), 30M ] @>

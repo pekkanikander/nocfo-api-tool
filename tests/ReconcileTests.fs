@@ -1,8 +1,10 @@
 module ReconcileTests
 
+open System.IO
 open Xunit
 open Swensen.Unquote
 open FSharp.Control
+open Nocfo
 open NocfoClient
 open Nocfo.Domain
 
@@ -44,3 +46,34 @@ let ``A difference within the tolerance reconciles`` () =
 [<Fact>]
 let ``Balances out of date order are rejected`` () =
     raises<StreamOrderException> <@ reconcile 0M [ "2025-01-02", 10M; "2025-01-01", 10M ] [] @>
+
+[<Fact>]
+let ``A reverse-order bank statement reconciles against a daily-balance CSV`` () =
+    // The nda side goes through BalanceSource.read, the same path the CLI takes, so this
+    // covers the statement sort end to end without production data or network access.
+    let nda =
+        TitoTests.file
+            [ TitoTests.headerPeriod "10963000000001" "260201" "260228" 20M
+              TitoTests.dayBalance "260203" 30M
+              TitoTests.headerPeriod "10963000000001" "260101" "260131" 10M
+              TitoTests.dayBalance "260105" 20M ]
+    let ndaPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".nda")
+    let csvPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".csv")
+    try
+        File.WriteAllBytes(ndaPath, TitoTests.bytes nda)
+        File.WriteAllText(csvPath, "date,balance\n2026-01-05,20\n2026-02-03,30\n")
+        let query = { dateFrom = None; dateTo = None; accounts = Set.empty; charset = TitoCharset.Auto }
+        let read text =
+            BalanceSource.parse text
+            |> Result.bind (fun source -> BalanceSource.read None query source |> Async.RunSynchronously)
+        let result =
+            match read $"nda:{ndaPath}", read $"csv:{csvPath}" with
+            | Ok left, Ok right ->
+                Reconcile.daily 0M (AsyncSeq.ofSeq left) (AsyncSeq.ofSeq right)
+                |> AsyncSeq.toListSynchronously
+                |> List.map (fun row -> row.date, row.status)
+            | other -> failwithf "Expected two sources, got %A" other
+        test <@ result = [ "2026-01-05", "ok"; "2026-02-03", "ok" ] @>
+    finally
+        File.Delete ndaPath
+        File.Delete csvPath
