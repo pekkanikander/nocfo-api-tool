@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/hawaii-client/src/">
   </Folder>
+  <Project Path="cashbook/cashbook.fsproj" />
   <Project Path="hawaii-client/hawaii-client.fsproj" />
   <Project Path="tests/tests.fsproj" />
   <Project Path="tools/tools.fsproj" />
