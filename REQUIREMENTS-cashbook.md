@@ -124,7 +124,7 @@ the summary posting is a permitted combined entry.
 nocfo cashbook match  -k kassakirja.csv -m mobilepay.csv [-r rules.toml] [--from --to]   → match.csv
 nocfo cashbook plan   -k ... -m ... [-r ...] [--match match.csv] [--review review.csv]     → plan.csv
 nocfo cashbook record -b <slug> --plan plan.csv
-nocfo cashbook check  -b <slug> [-r rules.toml]                                            → report, exit code
+nocfo cashbook check  -b <slug> -r rules.toml                                              → report, exit code
 nocfo cashbook seed   -b <slug>                                                            → rules.toml skeleton
 ```
 
