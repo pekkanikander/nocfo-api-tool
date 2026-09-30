@@ -772,16 +772,21 @@ let statement (output: TextWriter) (args: ParseResults<StatementArgs>) =
             return ExitCodes.EX_OK
     }
 
+type private AccountType = NocfoApi.Types.Type92dEnum
+
+let private cashbookKind (accountType: AccountType) =
+    match accountType with
+    | AccountType.REV | AccountType.REV_SAL | AccountType.REV_NO -> Nocfo.Cashbook.AccountKind.Income
+    | AccountType.EXP | AccountType.EXP_DEP | AccountType.EXP_NO | AccountType.EXP_50
+    | AccountType.EXP_TAX | AccountType.EXP_TAX_PRE -> Nocfo.Cashbook.AccountKind.Expense
+    | AccountType.ASS | AccountType.ASS_DEP | AccountType.ASS_VAT | AccountType.ASS_REC | AccountType.ASS_PAY | AccountType.ASS_DUE
+    | AccountType.LIA | AccountType.LIA_EQU | AccountType.LIA_PRE | AccountType.LIA_DUE | AccountType.LIA_DEB | AccountType.LIA_ACC
+    | AccountType.LIA_VAT -> Nocfo.Cashbook.AccountKind.Balance
+
 let private cashbookAccount (row: AccountRow) : Nocfo.Cashbook.Account option =
     match row.``type`` with
     | None -> None
-    | Some accountType ->
-        let kind =
-            match accountType.Format().Substring(0, 3) with
-            | "REV" -> Nocfo.Cashbook.AccountKind.Income
-            | "EXP" -> Nocfo.Cashbook.AccountKind.Expense
-            | _     -> Nocfo.Cashbook.AccountKind.Balance
-        Some { number = row.number; name = row.name; kind = kind }
+    | Some accountType -> Some { number = row.number; name = row.name; kind = cashbookKind accountType }
 
 let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) =
     async {

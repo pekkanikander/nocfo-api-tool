@@ -41,8 +41,8 @@ let ``Asset and liability accounts are listed as candidates in number order`` ()
     test <@ rendered.Contains "\n#   1900  Kassa\n#   1930  MobilePay\ncash " @>
 
 [<Fact>]
-let ``A stub is commented out and carries the lower-cased name as its only keyword`` () =
-    test <@ rendered.Contains "# [[classification.income]]\n# account  = \"3060\"\n# name     = \"Pääsymaksut\"\n# keywords = [\"pääsymaksut\"]\n" @>
+let ``A stub is commented out with empty keywords`` () =
+    test <@ rendered.Contains "# [[classification.income]]\n# account  = \"3060\"\n# name     = \"Pääsymaksut\"\n# keywords = []\n" @>
 
 [<Fact>]
 let ``The skeleton is TOML with no rules and a blank cafe account`` () =

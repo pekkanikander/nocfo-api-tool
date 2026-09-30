@@ -4,6 +4,7 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="rules-template.toml" LogicalName="rules-template.toml" />
     <Compile Include="Seed.fs" />
   </ItemGroup>
 </Project>
