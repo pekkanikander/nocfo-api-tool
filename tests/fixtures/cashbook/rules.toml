@@ -1,0 +1,113 @@
+# Shared rules for the cash-book fixtures. Fixture-only: every account number and name here
+# is a placeholder, and the expected outputs depend on these exact values.
+
+[accounts]
+cash           = { number = "1900", name = "Kassa" }
+mobilepay      = { number = "1930", name = "MobilePay" }
+fees           = { number = "8100", name = "Palvelumaksut" }
+reimbursements = { number = "2900", name = "Kulukorvausvelat" }
+
+[mobilepay]
+# Maksutapa values, by meaning (I6). Expense and payout values are still unknown.
+payment_in = ["Maksa Lippaaseen"]
+fee        = ["Palvelumaksu"]
+expense    = []
+payout     = []
+
+[matching]
+days_before = 1
+days_after  = 3
+max_subset  = 8
+tolerance   = 0.50
+# M7 cost weights: lower total cost wins
+weight_unmatched     = 100
+weight_near_miss     = 10
+weight_date_distance = 1
+weight_subset_size   = 0.1
+weight_coherence     = -5
+
+[classification]
+majority_min    = 3      # K4
+same_amount_min = 3      # K5
+
+[classification.cafe]                # K6
+account                  = "3000"
+max_amount               = 10.00
+min_transactions_per_day = 3
+
+# Keywords are case-insensitive substrings. The first rule that hits wins, so order by priority.
+
+[[classification.income]]
+account  = "3000"
+name     = "Kahvila"
+keywords = ["kahvila", "kahvi", "kaffe", "tee", "muffi", "piirak", "mehu"]
+
+[[classification.income]]
+account  = "3060"
+name     = "Pääsymaksut"
+keywords = ["pääsymaks", "sisäänpääsy"]
+
+[[classification.income]]
+account  = "3010"
+name     = "Tanssit"
+keywords = ["tanssit"]
+
+[[classification.income]]
+account  = "3020"
+name     = "Rumpupiiri"
+keywords = ["rumpupiiri"]
+
+[[classification.income]]
+account  = "3030"
+name     = "Yöpymiset"
+keywords = ["yöpymi", "yopymi", "majoitus"]
+
+[[classification.income]]
+account  = "3040"
+name     = "Lahjoitukset"
+keywords = ["lahjoitus"]
+
+[[classification.income]]
+account  = "3070"
+name     = "Jäsenmaksut"
+keywords = ["jäsenmaksu"]
+
+[[classification.income]]
+account  = "3050"
+name     = "Tilavuokra"
+keywords = ["vuokra"]
+
+[[classification.income]]
+account  = "3080"
+name     = "Tapahtumat"
+keywords = ["neuvosto", "vuodenpyörä"]
+
+[[classification.income]]
+account  = "3090"
+name     = "Alkufest tuotot"
+keywords = ["alkufest"]
+
+[[classification.expense]]
+account  = "4000"
+name     = "Alkufest kulut"
+keywords = ["alkufest"]
+
+[[classification.expense]]
+account  = "4100"
+name     = "Kahvilan ostot"
+keywords = ["kahvi", "maito", "lidl", "kahvila"]
+
+[coalesce.cash]
+max_days = 3
+max_gap  = 1
+
+[coalesce.mobilepay]
+max_days = 4
+max_gap  = 1
+
+[coalesce.fees]
+max_days = 7
+max_gap  = 7
+
+[posting]
+marker = "[kassakirja]"

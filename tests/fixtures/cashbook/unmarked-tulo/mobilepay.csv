@@ -1,0 +1,7 @@
+Päivämäärä,Nimi,Tyyppi,Numero,Viesti,Summa,Valuutta,Maksutapa,Tapahtumatunnus
+11/09/2026 20:39,A A,Henkilö,,Kaffet ja sisäänpääsy,15,EUR,Maksa Lippaaseen,2005
+11/09/2026 19:04,Palvelumaksu,,,,-2,EUR,Palvelumaksu,f-2001
+11/09/2026 19:04,B B,Henkilö,,,1,EUR,Maksa Lippaaseen,2002
+11/09/2026 18:57,B B,Henkilö,,,7,EUR,Maksa Lippaaseen,2003
+11/09/2026 18:56,C C,Henkilö,,Pääsymaksy,10,EUR,Maksa Lippaaseen,2004
+11/09/2026 18:14,D D,Henkilö,,Kahvila,11,EUR,Maksa Lippaaseen,2001

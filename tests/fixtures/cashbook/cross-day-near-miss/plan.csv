@@ -1,0 +1,6 @@
+date;payment_account;offset_account;amount;lines;receipts;description
+2026-09-19;1930;3080;4,00;1;0;[kassakirja] MobilePay/Tapahtumat 2026-09-19 (1)
+2026-09-20;1900;3080;39,00;2;0;[kassakirja] Kassa/Tapahtumat 2026-09-19–2026-09-20 (2)
+2026-09-21;1930;3080;22,00;2;0;[kassakirja] MobilePay/Tapahtumat 2026-09-21 (2)
+2026-09-22;1930;3050;59,83;3;0;[kassakirja] MobilePay/Tilavuokra 2026-09-21–2026-09-22 (3)
+2026-09-22;1930;8100;-2,00;1;0;[kassakirja] MobilePay/Palvelumaksut 2026-09-22 (1)

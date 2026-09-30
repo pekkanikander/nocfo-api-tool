@@ -1,0 +1,4 @@
+date;payment_account;offset_account;amount;lines;receipts;description
+2026-07-18;1900;3010;10,00;1;0;[kassakirja] Kassa/Tanssit 2026-07-18 (1)
+2026-07-18;1930;3010;44,70;5;0;[kassakirja] MobilePay/Tanssit 2026-07-18 (5)
+2026-07-18;1930;8100;-2,00;1;0;[kassakirja] MobilePay/Palvelumaksut 2026-07-18 (1)
