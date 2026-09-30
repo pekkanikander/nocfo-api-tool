@@ -183,7 +183,7 @@ F# requires declaration-before-use ordering:
 
 `tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Program.fs`.
 
-`cashbook/`: `Seed.fs` (namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
+`cashbook/`: `Seed.fs` → `Rules.fs` (namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
 
 ---
 
@@ -235,6 +235,7 @@ No network access — HTTP is faked with a stub `HttpMessageHandler` (see `Entit
 - `ReconcileTests.fs` — `Reconcile.daily` carry-forward, tolerance, and ordering
 - `BlueprintJsonTests.fs` — document blueprint account-ID remapping
 - `SeedTests.fs` — `Seed.render`: the `rules.toml` skeleton, parsed with Tomlyn before and after uncommenting the stubs
+- `RulesTests.fs` — `Rules.parse` on the fixture `rules.toml` and on malformed snippets, and `Rules.check` against a hand-built chart
 
 **Unquote + `inline` functions:** Unquote cannot dynamically invoke `inline` SRTP
 functions via quotation reflection. Pre-compute the result into a `let result = ...`

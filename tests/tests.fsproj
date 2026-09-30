@@ -33,5 +33,6 @@
     <Compile Include="BalanceTests.fs" />
     <Compile Include="ReconcileTests.fs" />
     <Compile Include="SeedTests.fs" />
+    <Compile Include="RulesTests.fs" />
   </ItemGroup>
 </Project>
