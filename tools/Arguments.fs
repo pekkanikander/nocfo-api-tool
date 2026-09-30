@@ -132,6 +132,14 @@ type StatementArgs =
             | Fields _   -> "Comma-separated list of columns to emit (default: all)."
 
 [<RequireSubcommand>]
+type CashbookArgs =
+    | [< NoPrefix; SubCommand >]                  Seed of ParseResults<BusinessScopedArgs>
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Seed _ -> "Write a rules.toml skeleton from the chart of accounts."
+
+[<RequireSubcommand>]
 type CliArgs =
     | [< AltCommandLine("-o"); Inherit >]         Out     of outPath: string
     | [< AltCommandLine("-i"); Inherit >]         In      of inPath: string
@@ -146,6 +154,7 @@ type CliArgs =
     | [< NoPrefix; SubCommand >]                  Balance of ParseResults<BalanceArgs>
     | [< NoPrefix; SubCommand >]                  Reconcile of ParseResults<ReconcileArgs>
     | [< NoPrefix; SubCommand >]                  Statement of ParseResults<StatementArgs>
+    | [< NoPrefix; SubCommand >]                  Cashbook of ParseResults<CashbookArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
@@ -162,3 +171,4 @@ type CliArgs =
             | Balance _    -> "Rolling balance of an account over a period."
             | Reconcile _  -> "Compare the daily balances of two sources."
             | Statement _  -> "Dump the transactions of a bank statement (.nda) as CSV."
+            | Cashbook _   -> "Cash-book posting (seed)."

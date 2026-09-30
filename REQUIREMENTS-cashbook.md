@@ -6,7 +6,7 @@ a fixture is a directory with `kassakirja.csv`, `mobilepay.csv`, the expected `m
 `plan.csv` and `review.csv`, and optionally its own `rules.toml` (else the shared one).
 The real data stays in `tmp/` (gitignored); fixtures are synthetic.
 
-Last edited 2026-09-29.
+Last edited 2026-09-30.
 
 ---
 
@@ -116,7 +116,7 @@ the summary posting is a permitted combined entry.
 | --- | --- | --- |
 | V1 | The file is parsed strictly: an unknown table or key is an error, so a mistyped key cannot silently disable a rule. | P |
 | V2 | Every account number in the file, role accounts and rule accounts alike, must exist in the business. `cashbook check` verifies this against the live accounts list and warns where the NoCFO account name differs from the `name` in the file. `record` runs the same check first and refuses on any missing account. | P |
-| V3 | `cashbook seed` writes a skeleton from the live accounts list: the role accounts left blank, and one commented-out rule stub per account with its NoCFO name as the only keyword, in account-number order. Keyword inference from examples is not algorithmic; keywords are written by hand, or later derived from corrected `match.csv`/`plan.csv` files. | P |
+| V3 | `cashbook seed` writes a skeleton from the live accounts list: the role accounts left blank, and one commented-out rule stub per account with its NoCFO name as the only keyword, in account-number order. Keyword inference from examples is not algorithmic; keywords are written by hand, or later derived from corrected `match.csv`/`plan.csv` files. | I |
 
 ## 8. CLI surface (proposed)
 

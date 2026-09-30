@@ -772,6 +772,36 @@ let statement (output: TextWriter) (args: ParseResults<StatementArgs>) =
             return ExitCodes.EX_OK
     }
 
+let private cashbookAccount (row: AccountRow) : Nocfo.Cashbook.Account option =
+    match row.``type`` with
+    | None -> None
+    | Some accountType ->
+        let kind =
+            match accountType.Format().Substring(0, 3) with
+            | "REV" -> Nocfo.Cashbook.AccountKind.Income
+            | "EXP" -> Nocfo.Cashbook.AccountKind.Expense
+            | _     -> Nocfo.Cashbook.AccountKind.Balance
+        Some { number = row.number; name = row.name; kind = kind }
+
+let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) =
+    async {
+        let! businessContext = getBusinessContext toolContext args
+        match businessContext with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok context ->
+            let! accounts =
+                Streams.streamAccountRows context
+                |> AsyncSeqResult.unwrapOrThrow
+                |> AsyncSeq.choose cashbookAccount
+                |> AsyncSeq.toListAsync
+            toolContext.Output.Write(Nocfo.Cashbook.Seed.render accounts)
+            return ExitCodes.EX_OK
+    }
+
+let cashbook (toolContext: ToolContext) (args: ParseResults<CashbookArgs>) =
+    match args.GetSubCommand() with
+    | CashbookArgs.Seed seedArgs -> cashbookSeed toolContext seedArgs
+
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =
         parser.ParseCommandLine(argv, raiseOnUsage = true)
@@ -813,6 +843,7 @@ let private run (parser: ArgumentParser<CliArgs>) argv =
         | CliArgs.Create _ -> create toolContext (results.GetResult Create)
         | CliArgs.Balance _   -> balance   toolContext (results.GetResult CliArgs.Balance)
         | CliArgs.Reconcile _ -> reconcile toolContext (results.GetResult CliArgs.Reconcile)
+        | CliArgs.Cashbook _  -> cashbook  toolContext (results.GetResult CliArgs.Cashbook)
         | _ ->
             eprintfn "%s" (parser.PrintUsage())
             async.Return ExitCodes.EX_USAGE

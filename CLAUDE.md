@@ -20,7 +20,8 @@ api/openapi.json         NoCFO OpenAPI spec (source of truth for regeneration)
 hawaii-client/           The library (used by tools/)
   generated/             Hawaii-generated code — do NOT hand-edit
   src/                   Hand-written domain, streaming, HTTP, CSV logic
-tools/                   CLI exe project `nocfo` (depends on hawaii-client)
+cashbook/                Cash-book library (pure; no NoCFO dependency; used by tools/)
+tools/                   CLI exe project `nocfo` (depends on hawaii-client and cashbook)
 tests/                   xUnit unit tests — pure, no network
 tests-online/            Bash regression tests against api-tst (not part of `dotnet test`)
 requests/                VS Code REST client files for manual HTTP testing
@@ -142,6 +143,7 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 | `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
 | `reconcile` | daily balances of two sources compared day by day |
 | `statement` | transactions of a TITO bank statement as CSV (local file, no API) |
+| `cashbook seed` | `rules.toml` skeleton from the chart of accounts: role accounts blank, one commented-out rule stub per revenue and expense account |
 
 ```bash
 dotnet run --project tools -- list businesses --fields "id,name,slug"
@@ -181,6 +183,8 @@ F# requires declaration-before-use ordering:
 
 `tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Program.fs`.
 
+`cashbook/`: `Seed.fs` (namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
+
 ---
 
 ## Known Limitations & TODOs (as of August 2026)
@@ -215,7 +219,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 126 tests
+dotnet test tests     # 139 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).
@@ -230,6 +234,7 @@ No network access — HTTP is faked with a stub `HttpMessageHandler` (see `Entit
 - `BalanceTests.fs` — `Balance.rows` / `dailyClosing` over a hand-built ledger response
 - `ReconcileTests.fs` — `Reconcile.daily` carry-forward, tolerance, and ordering
 - `BlueprintJsonTests.fs` — document blueprint account-ID remapping
+- `SeedTests.fs` — `Seed.render`: the `rules.toml` skeleton, parsed with Tomlyn before and after uncommenting the stubs
 
 **Unquote + `inline` functions:** Unquote cannot dynamically invoke `inline` SRTP
 functions via quotation reflection. Pre-compute the result into a `let result = ...`

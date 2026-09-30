@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../cashbook/cashbook.fsproj" />
     <ProjectReference Include="../hawaii-client/hawaii-client.fsproj" />
   </ItemGroup>
 
