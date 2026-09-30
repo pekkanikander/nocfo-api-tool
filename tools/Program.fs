@@ -788,24 +788,60 @@ let private cashbookAccount (row: AccountRow) : Nocfo.Cashbook.Account option =
     | None -> None
     | Some accountType -> Some { number = row.number; name = row.name; kind = cashbookKind accountType }
 
-let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) =
+let private cashbookChart (accounting: AccountingContext) (businessId: string) =
     async {
-        let! businessContext = getBusinessContext toolContext args
+        let! businessContext = resolveBusinessContext accounting businessId
         match businessContext with
-        | Error error -> return mapDomainErrorToExitCode error
+        | Error error -> return Error error
         | Ok context ->
             let! accounts =
                 Streams.streamAccountRows context
                 |> AsyncSeqResult.unwrapOrThrow
                 |> AsyncSeq.choose cashbookAccount
                 |> AsyncSeq.toListAsync
+            return Ok accounts
+    }
+
+let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) =
+    async {
+        let! chart = cashbookChart toolContext.Accounting (args.GetResult BusinessScopedArgs.BusinessId)
+        match chart with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok accounts ->
             toolContext.Output.Write(Nocfo.Cashbook.Seed.render accounts)
+            return ExitCodes.EX_OK
+    }
+
+let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckArgs>) =
+    async {
+        match Nocfo.Cashbook.Rules.parse (File.ReadAllText (args.GetResult CashbookCheckArgs.Rules)) with
+        | Error errors ->
+            for error in errors do eprintfn "%s" error
+            return ExitCodes.EX_DATAERR
+        | Ok rules ->
+
+        let! chart = cashbookChart toolContext.Accounting (args.GetResult CashbookCheckArgs.BusinessId)
+        match chart with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok accounts ->
+
+        let findings = Nocfo.Cashbook.Rules.check accounts rules
+        for finding in findings do
+            let severity =
+                match Nocfo.Cashbook.Finding.severity finding with
+                | Nocfo.Cashbook.Severity.Error -> "error"
+                | Nocfo.Cashbook.Severity.Warning -> "warning"
+            toolContext.Output.WriteLine $"{severity}: {Nocfo.Cashbook.Finding.describe finding}"
+        if findings |> List.exists (fun finding -> Nocfo.Cashbook.Finding.severity finding = Nocfo.Cashbook.Severity.Error) then
+            return ExitCodes.EX_DATAERR
+        else
             return ExitCodes.EX_OK
     }
 
 let cashbook (toolContext: ToolContext) (args: ParseResults<CashbookArgs>) =
     match args.GetSubCommand() with
-    | CashbookArgs.Seed seedArgs -> cashbookSeed toolContext seedArgs
+    | CashbookArgs.Seed seedArgs   -> cashbookSeed  toolContext seedArgs
+    | CashbookArgs.Check checkArgs -> cashbookCheck toolContext checkArgs
 
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =

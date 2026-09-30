@@ -131,13 +131,24 @@ type StatementArgs =
             | Charset _  -> "Character set of the statement: auto (default), ascii-fi, latin1 or utf8."
             | Fields _   -> "Comma-separated list of columns to emit (default: all)."
 
-[<RequireSubcommand>]
-type CashbookArgs =
-    | [< NoPrefix; SubCommand >]                  Seed of ParseResults<BusinessScopedArgs>
+type CashbookCheckArgs =
+    | [< AltCommandLine("-b"); Mandatory >]       BusinessId of string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | Seed _ -> "Write a rules.toml skeleton from the chart of accounts."
+            | BusinessId _ -> "Business identifier (Y-tunnus|VAT-code)."
+            | Rules _      -> "The rules.toml to check."
+
+[<RequireSubcommand>]
+type CashbookArgs =
+    | [< NoPrefix; SubCommand >]                  Seed of ParseResults<BusinessScopedArgs>
+    | [< NoPrefix; SubCommand >]                  Check of ParseResults<CashbookCheckArgs>
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Seed _  -> "Write a rules.toml skeleton from the chart of accounts."
+            | Check _ -> "Check a rules.toml against the chart of accounts."
 
 [<RequireSubcommand>]
 type CliArgs =
@@ -171,4 +182,4 @@ type CliArgs =
             | Balance _    -> "Rolling balance of an account over a period."
             | Reconcile _  -> "Compare the daily balances of two sources."
             | Statement _  -> "Dump the transactions of a bank statement (.nda) as CSV."
-            | Cashbook _   -> "Cash-book posting (seed)."
+            | Cashbook _   -> "Cash-book posting (seed, check)."
