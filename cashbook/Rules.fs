@@ -75,6 +75,29 @@ type Rules =
       coalesce: Coalescing
       posting: Posting }
 
+[<RequireQualifiedAccess>]
+type Severity =
+    | Error
+    | Warning
+
+/// What `check` found about one account reference in the file (V2).
+type Finding =
+    | MissingAccount of reference: string * number: string
+    | NameDiffers of reference: string * number: string * file: string * nocfo: string
+
+module Finding =
+
+    let severity (finding: Finding) =
+        match finding with
+        | MissingAccount _ -> Severity.Error
+        | NameDiffers _ -> Severity.Warning
+
+    let describe (finding: Finding) =
+        match finding with
+        | MissingAccount (reference, number) -> $"{reference}: account {number} does not exist"
+        | NameDiffers (reference, number, file, nocfo) ->
+            $"{reference}: account {number} is named '{nocfo}' in NoCFO, '{file}' in the file"
+
 module Rules =
 
     let private asString (raw: obj) =
@@ -263,3 +286,23 @@ module Rules =
             let errors = ResizeArray<string>()
             let rules = Table.Read(errors, "", Toml.ToModel document, rules)
             if errors.Count = 0 then Ok rules else Error (List.ofSeq errors)
+
+    /// Every account the file names, checked against the chart of accounts (V2): a number the
+    /// business lacks is an error, a name that differs from NoCFO's is a warning.
+    let check (chart: Account list) (rules: Rules) : Finding list =
+        let names = chart |> List.map (fun account -> account.number, account.name) |> Map.ofList
+        let ofRole (key: string) (account: RoleAccount) =
+            $"accounts.{key}", account.number, Some account.name
+        let ofRules (key: string) (rules: Rule list) =
+            rules |> List.mapi (fun index rule -> $"classification.{key} #{index + 1}", rule.account, Some rule.name)
+        [ ofRole "cash" rules.accounts.cash
+          ofRole "mobilepay" rules.accounts.mobilepay
+          ofRole "fees" rules.accounts.fees
+          "classification.cafe", rules.classification.cafe.account, None
+          yield! ofRules "income" rules.classification.income
+          yield! ofRules "expense" rules.classification.expense ]
+        |> List.choose (fun (reference, number, name) ->
+            match Map.tryFind number names, name with
+            | None, _ -> Some (MissingAccount (reference, number))
+            | Some actual, Some expected when actual <> expected -> Some (NameDiffers (reference, number, expected, actual))
+            | _ -> None)

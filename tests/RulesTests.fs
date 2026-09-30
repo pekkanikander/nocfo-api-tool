@@ -92,3 +92,41 @@ let ``A value of the wrong type is rejected`` () =
 let ``A syntax error is reported with its position`` () =
     let result = errors "[matching\n"
     test <@ result.Head.StartsWith "(1,10) : error : " @>
+
+// ── Checking against the chart of accounts ────────────────────────────────────
+
+let private account number name kind : Account = { number = number; name = name; kind = kind }
+
+let private chart =
+    [ account "1900" "Kassa"          AccountKind.Balance
+      account "1930" "MobilePay"      AccountKind.Balance
+      account "8100" "Palvelumaksut"  AccountKind.Expense
+      account "3000" "Kahvila"        AccountKind.Income
+      account "3010" "Tanssit"        AccountKind.Income
+      account "3020" "Rumpupiiri"     AccountKind.Income
+      account "3030" "Yöpymiset"      AccountKind.Income
+      account "3040" "Lahjoitukset"   AccountKind.Income
+      account "3050" "Tilavuokra"     AccountKind.Income
+      account "3060" "Pääsymaksut"    AccountKind.Income
+      account "3070" "Jäsenmaksut"    AccountKind.Income
+      account "3080" "Tapahtumat"     AccountKind.Income
+      account "3090" "Alkufest tuotot" AccountKind.Income
+      account "4000" "Alkufest kulut" AccountKind.Expense
+      account "4100" "Kahvilan ostot" AccountKind.Expense ]
+
+[<Fact>]
+let ``A file whose accounts all exist under their names is clean`` () =
+    test <@ Rules.check chart rules = [] @>
+
+[<Fact>]
+let ``An account the business lacks is an error, wherever the file names it`` () =
+    let findings = Rules.check (chart |> List.filter (fun account -> account.number <> "3000")) rules
+    test <@ findings = [ MissingAccount ("classification.cafe", "3000"); MissingAccount ("classification.income #1", "3000") ] @>
+    test <@ findings |> List.map Finding.severity = [ Severity.Error; Severity.Error ] @>
+
+[<Fact>]
+let ``A name that differs from NoCFO's is a warning`` () =
+    let renamed = chart |> List.map (fun account -> if account.number = "1900" then { account with name = "Käteinen" } else account)
+    let findings = Rules.check renamed rules
+    test <@ findings = [ NameDiffers ("accounts.cash", "1900", "Kassa", "Käteinen") ] @>
+    test <@ findings |> List.map Finding.severity = [ Severity.Warning ] @>
