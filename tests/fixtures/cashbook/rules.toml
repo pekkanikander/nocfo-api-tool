@@ -19,7 +19,7 @@ days_before = 1
 days_after  = 3
 max_subset  = 8
 tolerance   = 0.50
-# M7 cost weights: lower total cost wins
+# M8 cost weights: lower total cost wins
 weight_unmatched     = 100
 weight_near_miss     = 10
 weight_date_distance = 1
