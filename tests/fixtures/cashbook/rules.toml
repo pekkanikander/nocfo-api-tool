@@ -5,7 +5,6 @@
 cash           = { number = "1900", name = "Kassa" }
 mobilepay      = { number = "1930", name = "MobilePay" }
 fees           = { number = "8100", name = "Palvelumaksut" }
-reimbursements = { number = "2900", name = "Kulukorvausvelat" }
 
 [mobilepay]
 # Maksutapa values, by meaning (I6). Expense and payout values are still unknown.

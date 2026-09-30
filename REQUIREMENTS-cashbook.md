@@ -48,7 +48,7 @@ Every posted line needs an offset account. Signals, in priority order:
 
 | id | rule | status |
 | --- | --- | --- |
-| K1 | Rules file (`rules.toml`): `[[classification.income]]` and `[[classification.expense]]` lists, each rule an account number, a display name and case-insensitive substring keywords. Income lines and MP payments in use the income list; till expenses, reimbursed expenses and MP expenses use the expense list. The first rule that hits wins; file order is the priority. | P |
+| K1 | Rules file (`rules.toml`): `[[classification.income]]` and `[[classification.expense]]` lists, each rule an account number, a display name and case-insensitive substring keywords. Income lines and MP payments in use the income list; till expenses and MP expenses use the expense list. A rule may also carry `from` and/or `to`, inclusive dates, and then hits only lines dated within that window; a missing bound is open. A windowed rule may omit `keywords`, in which case every line in its window hits; a rule with neither a window nor keywords is an error (V1). The date of a book line is `pvm` and of a MobilePay transaction its own date; the K3 fallback classifies the matched book line's `mita` with that line's date. The first rule that hits wins; file order is the priority. | P |
 | K2 | Cash-book lines classify on `mita`. | P |
 | K3 | MobilePay transactions classify on `Viesti`; if that yields nothing and the transaction is matched (M-rules) to a book line, the book line's `mita` is used. Applies to payments in and to MP expenses alike. | P |
 | K4 | Day-majority: an MP transaction still unclassified takes the account that at least `classification.majority_min` other MP transactions on the same day were classified to, if that account holds a strict majority of that day's classified MP transactions. | P |
@@ -75,7 +75,7 @@ income lines, MP expenses for expense lines) within the window, which runs from
 | M7 | A cash-marked book line whose amount equals an unmatched same-day MP transaction is reported `possible-mp` as a warning. It is still posted as cash. | P |
 | M8 | When several assignments satisfy M1–M5, choose the one with the lowest cost: unmatched lines, then near misses, then total date distance, then subset size; a transaction whose `Viesti` shares a word with the book `mita` lowers the cost. Weights live in `[matching]`. Ties are reported `ambiguous` and left unmatched. | P |
 | M9 | An unmarked income line that matches at M1–M4 is treated as MP (hint only, not posted). One that does not match is treated as cash and reported `assumed-cash`. | P |
-| M10 | An unmarked expense line is a private outlay to be reimbursed. It is recorded against `[accounts].reimbursements` (a liability), flagged in NoCFO (`is_flagged`) and its description says the paper receipt is still to be attached. Reported `reimbursed`. | P |
+| M10 | An unmarked expense line was paid from the till: it is posted as a cash expense and reported `unmarked-expense` in `review.csv`, so that the paper receipt is checked. | P |
 | M11 | An MP-marked expense line matches MP expense rows with M1–M8 applied to the negative amounts. An MP expense row with no book match is still recorded (K3 on `Viesti`) but reported `mp-expense-unbooked`, since for now every MP expense SHOULD also be in the book. | P |
 
 ## 4. Coalescing
@@ -96,7 +96,7 @@ the summary posting is a permitted combined entry.
 | id | rule | status |
 | --- | --- | --- |
 | P1 | `plan.csv` is the reviewable intermediate: `date;payment_account;offset_account;amount;lines;receipts;description`, sorted by date, payment account, offset account. `amount` is the change of the payment account (income positive, expenses and fees negative); `receipts` is the number of paper receipts expected (sum of `kuitti`). The documents CSV is rendered from it deterministically, every document a draft. | A |
-| P2 | Income: `debet_account_id` = payment account, `credit_entries` = one entry on the offset account. Expense: `credit_account_id` = the paying account (cash, MobilePay, or the reimbursements liability), `debet_entries` = one entry on the expense account. Fee: as an expense from MobilePay on the fee account. | P |
+| P2 | Income: `debet_account_id` = payment account, `credit_entries` = one entry on the offset account. Expense: `credit_account_id` = the paying account (cash or MobilePay), `debet_entries` = one entry on the expense account. Fee: as an expense from MobilePay on the fee account. | P |
 | P3 | Account numbers in `rules.toml` are resolved to ids once per run through the accounts list of the business. | P |
 | P4 | *Withdrawn: every document is a draft, see P1.* | — |
 | P5 | Idempotency: *open, to be designed separately.* The earlier delete-and-replace form is withdrawn; any design must distinguish drafts from finalised documents and never delete. Overlapping exports are handled by I5. | — |
@@ -106,8 +106,8 @@ the summary posting is a permitted combined entry.
 
 | id | rule | status |
 | --- | --- | --- |
-| R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `reimbursed`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined. | P |
-| R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `unknown-type`. Informational tiers (`cash`, `reimbursed`) appear only in `match.csv`. | P |
+| R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined. | P |
+| R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `unmarked-expense`, `unknown-type`. The informational tier `cash` appears only in `match.csv`. | P |
 | R3 | Amounts are `decimal` end to end (house rule). | A |
 
 ## 7. Rules file
@@ -135,7 +135,7 @@ nocfo cashbook seed   -b <slug>                                                 
 
 ## 9. Open questions
 
-1. Account numbers for Kassa, MobilePay Box, fees, reimbursements, and the offsets (user to
+1. Account numbers for Kassa, MobilePay Box, fees, and the offsets (user to
    fill `rules.toml`; `cashbook seed` will help once it exists).
 2. `BlueprintEntryRequest.amount` is documented as "smallest currency unit" but typed
    `float32`; verify against `bookkeeping_blueprint_retrieve` before P2 is implemented.
@@ -168,4 +168,6 @@ nocfo cashbook seed   -b <slug>                                                 
 - 2026-09-29 — CLI verb `post` renamed `record`.
 - 2026-09-30 — M2 added (several equal same-day amounts); M-rules renumbered.
 - 2026-09-30 — Matching window is asymmetric: `days_before`/`days_after`.
+- 2026-09-30 — A classification rule may carry a date window (`from`/`to`); keywords are optional within one (K1).
+- 2026-09-30 — Unmarked expenses were paid from the till: posted as cash with a receipt reminder in `review.csv`; the reimbursements role is dropped (M10 revised again).
 - 2026-09-30 — Rules file validated strictly and against live accounts (V1–V2); `seed` produces a skeleton only (V3).

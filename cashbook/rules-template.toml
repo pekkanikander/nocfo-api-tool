@@ -4,7 +4,6 @@
 cash           = { number = "", name = "" }
 mobilepay      = { number = "", name = "" }
 fees           = { number = "", name = "" }
-reimbursements = { number = "", name = "" }
 
 [mobilepay]
 # Maksutapa values, by meaning (I6). Expense and payout values are still unknown.
