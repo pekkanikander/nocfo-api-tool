@@ -1,21 +1,20 @@
 namespace Nocfo.Cashbook
 
 open System
-open System.Collections.Generic
-open Tomlyn
-open Tomlyn.Model
+open TomlReader
 
-type RoleAccount =
+type LedgerAccount =
     { number: string
       name: string }
 
-type Roles =
-    { cash: RoleAccount
-      mobilepay: RoleAccount
-      fees: RoleAccount }
+/// The payment accounts and the fee account, as the file names them.
+type Accounts =
+    { cash: LedgerAccount
+      mobilepay: LedgerAccount
+      fees: LedgerAccount }
 
-/// `Maksutapa` values by meaning (I6).
-type MobilePay =
+/// The `Maksutapa` values of each kind of MobilePay transaction (I6).
+type MobilePayKinds =
     { payment_in: string list
       fee: string list
       expense: string list
@@ -68,17 +67,12 @@ type Posting =
     { marker: string }
 
 type Rules =
-    { accounts: Roles
-      mobilepay: MobilePay
+    { accounts: Accounts
+      mobilepay: MobilePayKinds
       matching: Matching
       classification: Classification
       coalesce: Coalescing
       posting: Posting }
-
-[<RequireQualifiedAccess>]
-type Severity =
-    | Error
-    | Warning
 
 /// What `check` found about one account reference in the file (V2).
 type Finding =
@@ -87,133 +81,30 @@ type Finding =
 
 module Finding =
 
-    let severity (finding: Finding) =
+    /// A missing account is an error that `record` refuses on; a differing name is a warning.
+    let isError (finding: Finding) =
         match finding with
-        | MissingAccount _ -> Severity.Error
-        | NameDiffers _ -> Severity.Warning
+        | MissingAccount _ -> true
+        | NameDiffers _ -> false
 
     let describe (finding: Finding) =
         match finding with
-        | MissingAccount (reference, number) -> $"{reference}: account {number} does not exist"
+        | MissingAccount (reference, number) -> $"error: {reference}: account {number} does not exist"
         | NameDiffers (reference, number, file, nocfo) ->
-            $"{reference}: account {number} is named '{nocfo}' in NoCFO, '{file}' in the file"
+            $"warning: {reference}: account {number} is named '{nocfo}' in NoCFO, '{file}' in the file"
 
 module Rules =
 
-    let private asString (raw: obj) =
-        match raw with
-        | :? string as text -> Some text
-        | _ -> None
-
-    let private asInt (raw: obj) =
-        match raw with
-        | :? int64 as value -> Some (int value)
-        | _ -> None
-
-    let private asDecimal (raw: obj) =
-        match raw with
-        | :? int64 as value -> Some (decimal value)
-        | :? double as value -> Some (decimal value)
-        | _ -> None
-
-    let private asDate (raw: obj) =
-        match raw with
-        | :? TomlDateTime as value when value.Kind = TomlDateTimeKind.LocalDate ->
-            Some (DateOnly.FromDateTime value.DateTime.DateTime)
-        | _ -> None
-
-    let private asStrings (raw: obj) =
-        match raw with
-        | :? TomlArray as items when items |> Seq.forall (fun item -> item :? string) ->
-            Some (items |> Seq.cast<string> |> List.ofSeq)
-        | _ -> None
-
-    let private asTable (raw: obj) =
-        match raw with
-        | :? TomlTable as table -> Some table
-        | _ -> None
-
-    let private asTables (raw: obj) =
-        match raw with
-        | :? TomlTableArray as tables -> Some (List.ofSeq tables)
-        | _ -> None
-
-    /// One table of the file, read strictly. Every key read is remembered, so the keys left over
-    /// are the unknown ones. Errors accumulate rather than stop the read: a key that fails yields
-    /// a placeholder, which goes nowhere once there is an error.
-    type private Table(errors: ResizeArray<string>, path: string, toml: TomlTable) =
-        let read = HashSet<string>()
-
-        let fail (message: string) =
-            errors.Add(if path = "" then message else $"[{path}] {message}")
-
-        let child (key: string) =
-            if path = "" then key else $"{path}.{key}"
-
-        static member Read(errors, path, toml, read: Table -> 'T) : 'T =
-            let table = Table(errors, path, toml)
-            let value = read table
-            table.RejectUnread()
-            value
-
-        member _.Fail(message: string) = fail message
-
-        member private _.RejectUnread() =
-            for KeyValue (key, value) in toml do
-                if not (read.Contains key) then
-                    let kind =
-                        match value with
-                        | :? TomlTable | :? TomlTableArray -> "table"
-                        | _ -> "key"
-                    fail $"unknown {kind} '{key}'"
-
-        member private _.Optional(key: string, kind: string, convert: obj -> 'T option) : 'T option =
-            read.Add key |> ignore
-            match toml.TryGetValue key with
-            | true, raw ->
-                let value = convert raw
-                if value.IsNone then fail $"'{key}' must be {kind}"
-                value
-            | _ -> None
-
-        member private this.Required(key: string, kind: string, convert: obj -> 'T option, fallback: 'T) : 'T =
-            match this.Optional(key, kind, convert) with
-            | Some value -> value
-            | None ->
-                if not (toml.ContainsKey key) then fail $"missing key '{key}'"
-                fallback
-
-        member this.String(key) = this.Required(key, "a string", asString, "")
-        member this.Int(key) = this.Required(key, "an integer", asInt, 0)
-        member this.Decimal(key) = this.Required(key, "a number", asDecimal, 0M)
-        member this.Strings(key) = this.Required(key, "a list of strings", asStrings, [])
-        member this.OptionalStrings(key) = this.Optional(key, "a list of strings", asStrings) |> Option.defaultValue []
-        member this.OptionalDate(key) = this.Optional(key, "a date (YYYY-MM-DD, unquoted)", asDate)
-
-        member this.Table(key: string, read: Table -> 'T) : 'T =
-            match this.Optional(key, "a table", asTable) with
-            | Some table -> Table.Read(errors, child key, table, read)
-            | None ->
-                if not (toml.ContainsKey key) then fail $"missing table '{key}'"
-                // The table is absent or not a table; whatever its keys would say is moot.
-                read (Table(ResizeArray(), "", TomlTable()))
-
-        member this.Tables(key: string, read: Table -> 'T) : 'T list =
-            match this.Optional(key, "a list of tables", asTables) with
-            | Some tables ->
-                tables |> List.mapi (fun index table -> Table.Read(errors, $"{child key} #{index + 1}", table, read))
-            | None -> []
-
-    let private role (t: Table) : RoleAccount =
+    let private ledgerAccount (t: Table) : LedgerAccount =
         { number = t.String "number"
           name = t.String "name" }
 
-    let private roles (t: Table) : Roles =
-        { cash = t.Table("cash", role)
-          mobilepay = t.Table("mobilepay", role)
-          fees = t.Table("fees", role) }
+    let private accounts (t: Table) : Accounts =
+        { cash = t.Table("cash", ledgerAccount)
+          mobilepay = t.Table("mobilepay", ledgerAccount)
+          fees = t.Table("fees", ledgerAccount) }
 
-    let private mobilePay (t: Table) : MobilePay =
+    let private mobilePayKinds (t: Table) : MobilePayKinds =
         { payment_in = t.Strings "payment_in"
           fee = t.Strings "fee"
           expense = t.Strings "expense"
@@ -268,36 +159,28 @@ module Rules =
         { marker = t.String "marker" }
 
     let private rules (t: Table) : Rules =
-        { accounts = t.Table("accounts", roles)
-          mobilepay = t.Table("mobilepay", mobilePay)
+        { accounts = t.Table("accounts", accounts)
+          mobilepay = t.Table("mobilepay", mobilePayKinds)
           matching = t.Table("matching", matching)
           classification = t.Table("classification", classification)
           coalesce = t.Table("coalesce", coalescing)
           posting = t.Table("posting", posting) }
 
-    /// Parses a `rules.toml` strictly (V1): every table and key must be known, present and of
-    /// its type, and a classification rule must have keywords or a date window. Every error in
-    /// the file is reported, in file order.
-    let parse (text: string) : Result<Rules, string list> =
-        let document = Toml.Parse text
-        if document.HasErrors then
-            Error [ for diagnostic in document.Diagnostics -> string diagnostic ]
-        else
-            let errors = ResizeArray<string>()
-            let rules = Table.Read(errors, "", Toml.ToModel document, rules)
-            if errors.Count = 0 then Ok rules else Error (List.ofSeq errors)
+    /// Parses a `rules.toml` strictly (V1, see `TomlReader`); a classification rule must also
+    /// have keywords or a date window.
+    let parse (text: string) : Result<Rules, string list> = TomlReader.read text rules
 
     /// Every account the file names, checked against the chart of accounts (V2): a number the
     /// business lacks is an error, a name that differs from NoCFO's is a warning.
     let check (chart: Account list) (rules: Rules) : Finding list =
         let names = chart |> List.map (fun account -> account.number, account.name) |> Map.ofList
-        let ofRole (key: string) (account: RoleAccount) =
+        let ofAccount (key: string) (account: LedgerAccount) =
             $"accounts.{key}", account.number, Some account.name
         let ofRules (key: string) (rules: Rule list) =
             rules |> List.mapi (fun index rule -> $"classification.{key} #{index + 1}", rule.account, Some rule.name)
-        [ ofRole "cash" rules.accounts.cash
-          ofRole "mobilepay" rules.accounts.mobilepay
-          ofRole "fees" rules.accounts.fees
+        [ ofAccount "cash" rules.accounts.cash
+          ofAccount "mobilepay" rules.accounts.mobilepay
+          ofAccount "fees" rules.accounts.fees
           "classification.cafe", rules.classification.cafe.account, None
           yield! ofRules "income" rules.classification.income
           yield! ofRules "expense" rules.classification.expense ]

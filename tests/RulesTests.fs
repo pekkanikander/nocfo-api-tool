@@ -23,7 +23,7 @@ let private rules = parsed fixture
 // ── Parsing ───────────────────────────────────────────────────────────────────
 
 [<Fact>]
-let ``Role accounts are read as number and name`` () =
+let ``Payment and fee accounts are read as number and name`` () =
     test <@ rules.accounts.mobilepay = { number = "1930"; name = "MobilePay" } @>
 
 [<Fact>]
@@ -122,11 +122,11 @@ let ``A file whose accounts all exist under their names is clean`` () =
 let ``An account the business lacks is an error, wherever the file names it`` () =
     let findings = Rules.check (chart |> List.filter (fun account -> account.number <> "3000")) rules
     test <@ findings = [ MissingAccount ("classification.cafe", "3000"); MissingAccount ("classification.income #1", "3000") ] @>
-    test <@ findings |> List.map Finding.severity = [ Severity.Error; Severity.Error ] @>
+    test <@ findings |> List.forall Finding.isError @>
 
 [<Fact>]
 let ``A name that differs from NoCFO's is a warning`` () =
     let renamed = chart |> List.map (fun account -> if account.number = "1900" then { account with name = "Käteinen" } else account)
     let findings = Rules.check renamed rules
     test <@ findings = [ NameDiffers ("accounts.cash", "1900", "Kassa", "Käteinen") ] @>
-    test <@ findings |> List.map Finding.severity = [ Severity.Warning ] @>
+    test <@ not (findings |> List.exists Finding.isError) @>

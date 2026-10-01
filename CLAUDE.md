@@ -143,7 +143,7 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 | `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
 | `reconcile` | daily balances of two sources compared day by day |
 | `statement` | transactions of a TITO bank statement as CSV (local file, no API) |
-| `cashbook seed` | `rules.toml` skeleton from the chart of accounts: role accounts blank, one commented-out rule stub per revenue and expense account |
+| `cashbook seed` | `rules.toml` skeleton from the chart of accounts: payment and fee accounts blank, one commented-out rule stub per revenue and expense account |
 | `cashbook check` | a `rules.toml` parsed strictly and its account numbers checked against the chart of accounts: a missing account is an error, a name that differs from NoCFO's a warning |
 
 ```bash
@@ -184,7 +184,8 @@ F# requires declaration-before-use ordering:
 
 `tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Program.fs`.
 
-`cashbook/`: `Seed.fs` → `Rules.fs` (namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
+`cashbook/`: `Seed.fs` → `TomlReader.fs` (strict TOML-to-record reading, no domain knowledge) → `Rules.fs`
+(namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
 
 ---
 

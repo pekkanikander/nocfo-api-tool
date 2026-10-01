@@ -814,10 +814,12 @@ let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedAr
 
 let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckArgs>) =
     async {
-        match Nocfo.Cashbook.Rules.parse (File.ReadAllText (args.GetResult CashbookCheckArgs.Rules)) with
-        | Error errors ->
-            for error in errors do eprintfn "%s" error
-            return ExitCodes.EX_DATAERR
+        let rules =
+            File.ReadAllText (args.GetResult CashbookCheckArgs.Rules)
+            |> Nocfo.Cashbook.Rules.parse
+            |> Result.mapError (String.concat "\n" >> DomainError.BadData)
+        match rules with
+        | Error error -> return mapDomainErrorToExitCode error
         | Ok rules ->
 
         let! chart = cashbookChart toolContext.Accounting (args.GetResult CashbookCheckArgs.BusinessId)
@@ -827,15 +829,11 @@ let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckAr
 
         let findings = Nocfo.Cashbook.Rules.check accounts rules
         for finding in findings do
-            let severity =
-                match Nocfo.Cashbook.Finding.severity finding with
-                | Nocfo.Cashbook.Severity.Error -> "error"
-                | Nocfo.Cashbook.Severity.Warning -> "warning"
-            toolContext.Output.WriteLine $"{severity}: {Nocfo.Cashbook.Finding.describe finding}"
-        if findings |> List.exists (fun finding -> Nocfo.Cashbook.Finding.severity finding = Nocfo.Cashbook.Severity.Error) then
-            return ExitCodes.EX_DATAERR
-        else
-            return ExitCodes.EX_OK
+            toolContext.Output.WriteLine (Nocfo.Cashbook.Finding.describe finding)
+        return
+            if findings |> List.exists Nocfo.Cashbook.Finding.isError
+            then ExitCodes.EX_DATAERR
+            else ExitCodes.EX_OK
     }
 
 let cashbook (toolContext: ToolContext) (args: ParseResults<CashbookArgs>) =

@@ -182,4 +182,4 @@ type CliArgs =
             | Balance _    -> "Rolling balance of an account over a period."
             | Reconcile _  -> "Compare the daily balances of two sources."
             | Statement _  -> "Dump the transactions of a bank statement (.nda) as CSV."
-            | Cashbook _   -> "Cash-book posting (seed, check)."
+            | Cashbook _   -> "Prepare and upload a cash book."

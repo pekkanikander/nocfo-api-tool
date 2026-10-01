@@ -6,6 +6,7 @@
   <ItemGroup>
     <EmbeddedResource Include="rules-template.toml" LogicalName="rules-template.toml" />
     <Compile Include="Seed.fs" />
+    <Compile Include="TomlReader.fs" />
     <Compile Include="Rules.fs" />
   </ItemGroup>
   <ItemGroup>

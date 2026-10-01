@@ -1,5 +1,5 @@
 [accounts]
-# The asset and liability accounts of the business, to choose the roles from:
+# The asset and liability accounts of the business, to choose the cash and mobilepay accounts from:
 {{candidates}}
 cash           = { number = "", name = "" }
 mobilepay      = { number = "", name = "" }
