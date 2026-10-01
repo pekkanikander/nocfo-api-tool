@@ -29,12 +29,8 @@ weight_coherence     = -5
 majority_min    = 3      # K4
 same_amount_min = 3      # K5
 
-[classification.cafe]                # K6
-account                  = "3000"
-max_amount               = 10.00
-min_transactions_per_day = 3
-
-# Keywords are case-insensitive substrings. The first rule that hits wins, so order by priority.
+# A rule hits when every predicate it carries holds; keywords are case-insensitive substrings.
+# The first rule that hits wins, so order by priority.
 
 [[classification.income]]
 account  = "3000"
@@ -85,6 +81,15 @@ keywords = ["neuvosto", "vuodenpyörä"]
 account  = "3090"
 name     = "Alkufest tuotot"
 keywords = ["alkufest"]
+
+# K6: a small unmarked MobilePay payment on a day the cafe is already busy, flagged for review.
+[[classification.income]]
+account     = "3000"
+name        = "Kahvila"
+no_text     = true
+max_amount  = 10.00
+min_per_day = 3
+flag        = true
 
 [[classification.expense]]
 account  = "4000"

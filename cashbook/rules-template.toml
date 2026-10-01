@@ -28,12 +28,9 @@ weight_coherence     = -5
 majority_min    = 3      # K4
 same_amount_min = 3      # K5
 
-[classification.cafe]                # K6
-account                  = ""
-max_amount               = 10.00
-min_transactions_per_day = 3
-
-# Keywords are case-insensitive substrings. The first rule that hits wins, so order by priority.
+# A rule hits when every predicate it carries holds: keywords (case-insensitive substrings), no_text,
+# from/to dates, max_amount and min_per_day; flag = true sends its lines to review (K1).
+# The first rule that hits wins, so order by priority.
 # Below is one stub per revenue and expense account; uncomment the ones to use and fill in their keywords.
 
 {{stubs}}

@@ -45,11 +45,9 @@ let ``A stub is commented out with empty keywords`` () =
     test <@ rendered.Contains "# [[classification.income]]\n# account  = \"3060\"\n# name     = \"Pääsymaksut\"\n# keywords = []\n" @>
 
 [<Fact>]
-let ``The skeleton is TOML with no rules and a blank cafe account`` () =
+let ``The skeleton is TOML with no rules`` () =
     let classification = table (Toml.ToModel rendered) "classification"
-    let cafeAccount = string (table classification "cafe").["account"]
-    let hasRules = classification.ContainsKey "income" || classification.ContainsKey "expense"
-    test <@ cafeAccount = "" && not hasRules @>
+    test <@ not (classification.ContainsKey "income" || classification.ContainsKey "expense") @>
 
 [<Fact>]
 let ``Uncommenting every stub yields the rules split by kind in number order`` () =

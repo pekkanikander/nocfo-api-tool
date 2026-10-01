@@ -7,6 +7,6 @@ own. All data is synthetic; names are single letters.
 
 | case | rules |
 | --- | --- |
-| exact-multi | M3, K3 (hint fills empty `Viesti`), K6, C1 |
+| exact-multi | M3, K3 (hint fills empty `Viesti`), C1 |
 | unmarked-tulo | M1, M7, M9, M10 (posted as cash, receipt reminder in review), K1 rule order, K3, C4 |
 | cross-day-near-miss | M4, M5, M8 (coherence beats an exact but scattered subset), K3 vs own `Viesti`, C2 for both cash (19–20) and MobilePay (21–22) |

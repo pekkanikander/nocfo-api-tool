@@ -26,6 +26,11 @@ module TomlReader =
         | :? double as value -> Some (decimal value)
         | _ -> None
 
+    let private asBool (raw: obj) =
+        match raw with
+        | :? bool as value -> Some value
+        | _ -> None
+
     let private asDate (raw: obj) =
         match raw with
         | :? TomlDateTime as value when value.Kind = TomlDateTimeKind.LocalDate ->
@@ -93,12 +98,15 @@ module TomlReader =
                 if not (toml.ContainsKey key) then fail $"missing key '{key}'"
                 fallback
 
-        member this.String(key) = this.Required(key, "a string", asString, "")
-        member this.Int(key) = this.Required(key, "an integer", asInt, 0)
-        member this.Decimal(key) = this.Required(key, "a number", asDecimal, 0M)
-        member this.Strings(key) = this.Required(key, "a list of strings", asStrings, [])
+        member this.String(key)          = this.Required(key, "a string",   asString, "")
+        member this.Int(key)             = this.Required(key, "an integer", asInt, 0)
+        member this.Decimal(key)         = this.Required(key, "a number",   asDecimal, 0M)
+        member this.Strings(key)         = this.Required(key, "a list of strings", asStrings, [])
+        member this.OptionalBool(key)    = this.Optional(key, "a boolean",  asBool) |> Option.defaultValue false
+        member this.OptionalInt(key)     = this.Optional(key, "an integer", asInt)
+        member this.OptionalDecimal(key) = this.Optional(key, "a number",   asDecimal)
         member this.OptionalStrings(key) = this.Optional(key, "a list of strings", asStrings) |> Option.defaultValue []
-        member this.OptionalDate(key) = this.Optional(key, "a date (YYYY-MM-DD, unquoted)", asDate)
+        member this.OptionalDate(key)    = this.Optional(key, "a date (YYYY-MM-DD, unquoted)", asDate)
 
         member this.Table(key: string, read: Table -> 'T) : 'T =
             match this.Optional(key, "a table", asTable) with

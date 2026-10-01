@@ -31,7 +31,6 @@ let ``Amounts and weights are decimal whether the file writes them as integers o
     test <@ rules.matching.tolerance = 0.50M @>
     test <@ rules.matching.weight_unmatched = 100M @>
     test <@ rules.matching.weight_subset_size = 0.1M @>
-    test <@ rules.classification.cafe.max_amount = 10.00M @>
 
 [<Fact>]
 let ``Coalescing limits are read per payment account`` () =
@@ -42,21 +41,34 @@ let ``Coalescing limits are read per payment account`` () =
 [<Fact>]
 let ``Rules keep file order and their keywords`` () =
     test <@ rules.classification.income |> List.map (fun rule -> rule.account)
-              = [ "3000"; "3060"; "3010"; "3020"; "3030"; "3040"; "3070"; "3050"; "3080"; "3090" ] @>
+              = [ "3000"; "3060"; "3010"; "3020"; "3030"; "3040"; "3070"; "3050"; "3080"; "3090"; "3000" ] @>
     test <@ rules.classification.expense.Head = { account = "4000"; name = "Alkufest kulut"; keywords = [ "alkufest" ]
-                                                  from = None; ``to`` = None } @>
+                                                  no_text = false; from_date = None; to_date = None
+                                                  max_amount = None; min_per_day = None; flag = false } @>
+
+[<Fact>]
+let ``The cafe rule carries its predicates and the flag`` () =
+    test <@ List.last rules.classification.income
+              = { account = "3000"; name = "Kahvila"; keywords = []; no_text = true; from_date = None; to_date = None
+                  max_amount = Some 10.00M; min_per_day = Some 3; flag = true } @>
 
 [<Fact>]
 let ``A windowed rule needs no keywords and its bounds are dates`` () =
     let rules = parsed (fixture + "\n[[classification.income]]\naccount = \"3032\"\nname = \"Alkufest\"\nfrom = 2026-09-11\nto = 2026-09-13\n")
     test <@ List.last rules.classification.income
-              = { account = "3032"; name = "Alkufest"; keywords = []
-                  from = Some (DateOnly(2026, 9, 11)); ``to`` = Some (DateOnly(2026, 9, 13)) } @>
+              = { account = "3032"; name = "Alkufest"; keywords = []; no_text = false
+                  from_date = Some (DateOnly(2026, 9, 11)); to_date = Some (DateOnly(2026, 9, 13))
+                  max_amount = None; min_per_day = None; flag = false } @>
 
 [<Fact>]
-let ``A rule with neither keywords nor a window is rejected`` () =
-    let result = errors "[[classification.expense]]\naccount = \"4000\"\nname = \"Kulut\"\nkeywords = []\n"
-    test <@ result |> List.contains "[classification.expense #1] a rule needs keywords or a date window (from/to)" @>
+let ``A rule without a predicate is rejected, and a flag is not one`` () =
+    let result = errors "[[classification.expense]]\naccount = \"4000\"\nname = \"Kulut\"\nkeywords = []\nflag = true\n"
+    test <@ result |> List.contains "[classification.expense #1] a rule needs a predicate: keywords, no_text, from/to, max_amount or min_per_day" @>
+
+[<Fact>]
+let ``A rule cannot require blank text and a keyword at once`` () =
+    let result = errors "[[classification.income]]\naccount = \"3000\"\nname = \"Kahvila\"\nkeywords = [\"kahvi\"]\nno_text = true\n"
+    test <@ result |> List.contains "[classification.income #1] 'no_text' excludes 'keywords'" @>
 
 [<Fact>]
 let ``A window whose from is after its to is rejected`` () =
@@ -87,6 +99,8 @@ let ``A mistyped key is both unknown and missing`` () =
 let ``A value of the wrong type is rejected`` () =
     let result = errors "[matching]\ndays_before = \"1\"\n"
     test <@ result |> List.contains "[matching] 'days_before' must be an integer" @>
+    let result = errors "[[classification.income]]\naccount = \"3000\"\nname = \"Kahvila\"\nno_text = \"yes\"\n"
+    test <@ result |> List.contains "[classification.income #1] 'no_text' must be a boolean" @>
 
 [<Fact>]
 let ``A syntax error is reported with its position`` () =
@@ -121,7 +135,7 @@ let ``A file whose accounts all exist under their names is clean`` () =
 [<Fact>]
 let ``An account the business lacks is an error, wherever the file names it`` () =
     let findings = Rules.check (chart |> List.filter (fun account -> account.number <> "3000")) rules
-    test <@ findings = [ MissingAccount ("classification.cafe", "3000"); MissingAccount ("classification.income #1", "3000") ] @>
+    test <@ findings = [ MissingAccount ("classification.income #1", "3000"); MissingAccount ("classification.income #11", "3000") ] @>
     test <@ findings |> List.forall Finding.isError @>
 
 [<Fact>]
