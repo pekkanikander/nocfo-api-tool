@@ -145,6 +145,7 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 | `statement` | transactions of a TITO bank statement as CSV (local file, no API) |
 | `cashbook seed` | `rules.toml` skeleton from the chart of accounts: payment and fee accounts blank, one commented-out rule stub per revenue and expense account |
 | `cashbook check` | a `rules.toml` parsed strictly and its account numbers checked against the chart of accounts: a missing account is an error, a name that differs from NoCFO's a warning |
+| `cashbook match` | the cash book matched against a MobilePay Box export under the `[matching]` weights of a `rules.toml`, written as `match.csv` (local files, no API; `--from`/`--to` restrict both inputs) |
 
 ```bash
 dotnet run --project tools -- list businesses --fields "id,name,slug"
@@ -185,6 +186,8 @@ F# requires declaration-before-use ordering:
 `tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Program.fs`.
 
 `cashbook/`: `Seed.fs` → `TomlReader.fs` (strict TOML-to-record reading, no domain knowledge) → `Rules.fs`
+→ `CsvReader.fs` (strict CSV-to-record reading, no domain knowledge) → `Period.fs` → `CashBook.fs` (the cash book)
+→ `MobilePay.fs` (the Box export) → `Matching.fs` → `Reports.fs` (`match.csv`)
 (namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
 
 ---
@@ -221,7 +224,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 157 tests
+dotnet test tests     # 185 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).
@@ -238,6 +241,9 @@ No network access — HTTP is faked with a stub `HttpMessageHandler` (see `Entit
 - `BlueprintJsonTests.fs` — document blueprint account-ID remapping
 - `SeedTests.fs` — `Seed.render`: the `rules.toml` skeleton, parsed with Tomlyn before and after uncommenting the stubs
 - `RulesTests.fs` — `Rules.parse` on the fixture `rules.toml` and on malformed snippets, and `Rules.check` against a hand-built chart
+- `CashBookTests.fs` — `CashBook.read`: the cash-book columns, `tapa` normalisation, and the located errors
+- `MobilePayTests.fs` — `MobilePay.read`: the export columns, kinds by `Maksutapa`, currency, and duplicate ids
+- `MatchingTests.fs` — the `tests/fixtures/cashbook/*/match.csv` golden files, hand-built tier and assignment cases, and `Period`
 
 **Unquote + `inline` functions:** Unquote cannot dynamically invoke `inline` SRTP
 functions via quotation reflection. Pre-compute the result into a `let result = ...`

@@ -34,5 +34,8 @@
     <Compile Include="ReconcileTests.fs" />
     <Compile Include="SeedTests.fs" />
     <Compile Include="RulesTests.fs" />
+    <Compile Include="CashBookTests.fs" />
+    <Compile Include="MobilePayTests.fs" />
+    <Compile Include="MatchingTests.fs" />
   </ItemGroup>
 </Project>

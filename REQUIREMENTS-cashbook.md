@@ -33,14 +33,14 @@ Last edited 2026-10-01.
 
 | id | rule | status |
 | --- | --- | --- |
-| I1 | Cash book CSV: `sivu;pvm;mita;tulo;meno;tapa;kuitti;huom`, `;` separated, decimal comma, UTF-8 with or without BOM. `pvm` is ISO. Exactly one of `tulo`/`meno` is non-empty. | P |
+| I1 | Cash book CSV: `sivu;pvm;mita;tulo;meno;tapa;kuitti;huom`, `;` separated, decimal comma, UTF-8 with or without BOM. `pvm` is ISO. Exactly one of `tulo`/`meno` is non-empty. | I |
 | I2 | `tapa` is normalised: `MP`, `MP?` → MobilePay; `KÄT`, `KT`, `KÄ` → cash; empty → unmarked. Anything else is a review item. | P |
-| I3 | `kuitti` is a receipt count (integer) or empty. `huom` is free text and carried into reports, never into NoCFO. | P |
-| I4 | MobilePay export CSV: `Päivämäärä,Nimi,Tyyppi,Numero,Viesti,Summa,Valuutta,Maksutapa,Tapahtumatunnus`; date `dd/MM/yyyy HH:mm` local time; decimal point. The XLSX is converted outside the tool for now. | P |
-| I5 | `Tapahtumatunnus` is the transaction identity. Several exports may overlap; transactions are de-duplicated on it. | P |
-| I6 | `Maksutapa` values are enumerated in `rules.toml` `[mobilepay]`: `payment_in` (`Maksa Lippaaseen`), `fee` (`Palvelumaksu`), `expense` (paid from MobilePay), `payout` (to the bank, already booked from the bank feed, never posted). A value in no list goes to review as `unknown-type` and is not posted. | P |
-| I7 | Only EUR. A non-EUR row is a hard error. | P |
-| I8 | `Nimi` is read for matching heuristics only and never written to any output that reaches NoCFO (see P6). | A |
+| I3 | `kuitti` is a receipt count (integer) or empty. `huom` is free text and carried into reports, never into NoCFO. | I |
+| I4 | MobilePay export CSV: `Päivämäärä,Nimi,Tyyppi,Numero,Viesti,Summa,Valuutta,Maksutapa,Tapahtumatunnus`; date `dd/MM/yyyy HH:mm` local time; decimal point. The XLSX is converted outside the tool for now. | I |
+| I5 | `Tapahtumatunnus` is the transaction identity. Several exports may overlap; transactions are de-duplicated on it. | I |
+| I6 | `Maksutapa` values are enumerated in `rules.toml` `[mobilepay]`: `payment_in` (`Maksa Lippaaseen`), `fee` (`Palvelumaksu`), `expense` (paid from MobilePay), `payout` (to the bank, already booked from the bank feed, never posted). A value in no list goes to review as `unknown-type` and is not posted. | I |
+| I7 | Only EUR. A non-EUR row is a hard error. | I |
+| I8 | `Nimi` is read for matching heuristics only and never written to any output that reaches NoCFO (see P6). | I |
 
 ## 2. Classification (offset account)
 
@@ -66,16 +66,16 @@ income lines, MP expenses for expense lines) within the window, which runs from
 
 | id | rule | status |
 | --- | --- | --- |
-| M1 | Same day, exact amount, only one transaction with that exact amount. | P |
-| M2 | Same day, several transactions of the exact amount, none yet matched. If exactly one has a `Viesti` sharing a word with the book `mita`, it matches; otherwise the earliest by time of day. They are interchangeable for classification, so the choice affects only the report. | P |
-| M3 | Same day, a subset of at most `matching.max_subset` transactions summing exactly to the amount. | P |
-| M4 | As M3 but within the window. | P |
-| M5 | Near miss: as M4 but the sum differs by at most `matching.tolerance`. Reported as `contradiction`; MobilePay wins, nothing is corrected in the book. | P |
-| M6 | An MP-marked book line with no match at any tier is reported `book-only`. It is still not posted. | P |
-| M7 | A cash-marked book line whose amount equals an unmatched same-day MP transaction is reported `possible-mp` as a warning. It is still posted as cash. | P |
-| M8 | When several assignments satisfy M1–M5, choose the one with the lowest cost: unmatched lines, then near misses, then total date distance, then subset size; a transaction whose `Viesti` shares a word with the book `mita` lowers the cost. Weights live in `[matching]`. Ties are reported `ambiguous` and left unmatched. | P |
-| M9 | An unmarked income line that matches at M1–M4 is treated as MP (hint only, not posted). One that does not match is treated as cash and reported `assumed-cash`. | P |
-| M10 | An unmarked expense line was paid from the till: it is posted as a cash expense and reported `unmarked-expense` in `review.csv`, so that the paper receipt is checked. | P |
+| M1 | Same day, exact amount, only one transaction with that exact amount. | I |
+| M2 | Same day, several transactions of the exact amount, none yet matched. If exactly one has a `Viesti` sharing a word with the book `mita`, it matches; otherwise the earliest by time of day. They are interchangeable for classification, so the choice affects only the report. | I |
+| M3 | Same day, a subset of at most `matching.max_subset` transactions summing exactly to the amount. | I |
+| M4 | As M3 but within the window. | I |
+| M5 | Near miss: as M4 but the sum differs by at most `matching.tolerance`. Reported as `contradiction`; MobilePay wins, nothing is corrected in the book. | I |
+| M6 | An MP-marked book line with no match at any tier is reported `book-only`. It is still not posted. | I |
+| M7 | A cash-marked book line whose amount equals an unmatched same-day MP transaction is reported `possible-mp` as a warning. It is still posted as cash. | I |
+| M8 | When several assignments satisfy M1–M5, choose the one with the lowest cost: unmatched lines, then near misses, then total date distance, then subset size; a transaction whose `Viesti` shares a word with the book `mita` lowers the cost. Weights live in `[matching]`. Ties are reported `ambiguous` and left unmatched. | I |
+| M9 | An unmarked income line that matches at M1–M4 is treated as MP (hint only, not posted). One that does not match is treated as cash and reported `assumed-cash`. | I |
+| M10 | An unmarked expense line was paid from the till: it is posted as a cash expense and reported `unmarked-expense` in `review.csv`, so that the paper receipt is checked. | I |
 | M11 | An MP-marked expense line matches MP expense rows with M1–M8 applied to the negative amounts. An MP expense row with no book match is still recorded (K3 on `Viesti`) but reported `mp-expense-unbooked`, since for now every MP expense SHOULD also be in the book. | P |
 
 ## 4. Coalescing
@@ -106,7 +106,7 @@ the summary posting is a permitted combined entry.
 
 | id | rule | status |
 | --- | --- | --- |
-| R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined. | P |
+| R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined. | I |
 | R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `assumed-cash`, `unmarked-expense`, `mp-expense-unbooked`, `flagged`, `unknown-type`. The informational tier `cash` appears only in `match.csv`. | P |
 | R3 | Amounts are `decimal` end to end (house rule). | A |
 
@@ -172,4 +172,5 @@ nocfo cashbook seed   -b <slug>                                                 
 - 2026-09-30 — Unmarked expenses were paid from the till: posted as cash with a receipt reminder in `review.csv`; the reimbursements role is dropped (M10 revised again).
 - 2026-09-30 — Rules file validated strictly and against live accounts (V1–V2); `seed` produces a skeleton only (V3).
 - 2026-10-01 — The cafe rule is an ordinary rule: predicates `no_text`, `max_amount` and `min_per_day` added to K1, the `[classification.cafe]` table dropped (K6). A MobilePay transaction's text is `Viesti` and the matched `mita` together, one pass (K3).
+- 2026-10-01 — Matching implemented: the M8 cost chooses the assignment and the tier is read off the chosen subset; same-day transactions of the same amount are interchangeable, the earliest taken (M2 generalised); an unmarked income line never takes a near miss (M9); lines sharing no candidate are assigned independently.
 - 2026-10-01 — A rule may carry `flag = true`: its lines are reported `flagged` in `review.csv` and counted per document in `plan.csv` (K1, R2, P1).

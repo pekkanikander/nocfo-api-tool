@@ -812,13 +812,15 @@ let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedAr
             return ExitCodes.EX_OK
     }
 
+/// A cash-book input file parsed by `parse`, its errors prefixed with the path.
+let private readCashbookFile (path: string) (parse: string -> Result<'T, string list>) =
+    File.ReadAllText path
+    |> parse
+    |> Result.mapError (List.map (fun error -> $"{path}: {error}") >> String.concat "\n" >> DomainError.BadData)
+
 let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckArgs>) =
     async {
-        let rules =
-            File.ReadAllText (args.GetResult CashbookCheckArgs.Rules)
-            |> Nocfo.Cashbook.Rules.parse
-            |> Result.mapError (String.concat "\n" >> DomainError.BadData)
-        match rules with
+        match readCashbookFile (args.GetResult CashbookCheckArgs.Rules) Nocfo.Cashbook.Rules.parse with
         | Error error -> return mapDomainErrorToExitCode error
         | Ok rules ->
 
@@ -836,10 +838,41 @@ let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckAr
             else ExitCodes.EX_OK
     }
 
-let cashbook (toolContext: ToolContext) (args: ParseResults<CashbookArgs>) =
+let cashbookMatch (output: TextWriter) (args: ParseResults<CashbookMatchArgs>) =
+    async {
+        match parseDay "--from" (args.TryGetResult CashbookMatchArgs.DateFrom),
+              parseDay "--to" (args.TryGetResult CashbookMatchArgs.DateTo) with
+        | Error error, _
+        | _, Error error -> return mapDomainErrorToExitCode error
+        | Ok dateFrom, Ok dateTo ->
+
+        match readCashbookFile (args.GetResult CashbookMatchArgs.Rules) Nocfo.Cashbook.Rules.parse with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok rules ->
+
+        let export = Nocfo.Cashbook.MobilePay.read rules.mobilepay
+        match readCashbookFile (args.GetResult CashbookMatchArgs.CashBook) Nocfo.Cashbook.CashBook.read,
+              readCashbookFile (args.GetResult CashbookMatchArgs.MobilePay) export with
+        | Error error, _
+        | _, Error error -> return mapDomainErrorToExitCode error
+        | Ok lines, Ok transactions ->
+
+        let period : Nocfo.Cashbook.Period = { from_date = dateFrom; to_date = dateTo }
+        let within = Nocfo.Cashbook.Period.contains period
+        let matches =
+            Nocfo.Cashbook.Matching.run rules
+                (lines |> List.filter (fun line -> within line.date))
+                (transactions |> List.filter (fun transaction -> within transaction.date))
+        output.Write (Nocfo.Cashbook.MatchReport.render matches)
+        return ExitCodes.EX_OK
+    }
+
+/// `match` reads local files only; the other verbs need the chart of accounts, hence the API.
+let cashbook (toolContext: Lazy<ToolContext>) (output: TextWriter) (args: ParseResults<CashbookArgs>) =
     match args.GetSubCommand() with
-    | CashbookArgs.Seed seedArgs   -> cashbookSeed  toolContext seedArgs
-    | CashbookArgs.Check checkArgs -> cashbookCheck toolContext checkArgs
+    | CashbookArgs.Seed seedArgs   -> cashbookSeed  toolContext.Value seedArgs
+    | CashbookArgs.Check checkArgs -> cashbookCheck toolContext.Value checkArgs
+    | CashbookArgs.Match matchArgs -> cashbookMatch output matchArgs
 
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =
@@ -865,14 +898,17 @@ let private run (parser: ArgumentParser<CliArgs>) argv =
     let verbose = results.Contains(CliArgs.Verbose)
     let profile = results.TryGetResult CliArgs.Profile
 
+    let toolContext = lazy Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
+
     let command =
         match subcommand with
         | CliArgs.Statement _ ->
             // Reads a local file only; needs no API configuration.
             statement output (results.GetResult CliArgs.Statement)
+        | CliArgs.Cashbook _ -> cashbook toolContext output (results.GetResult CliArgs.Cashbook)
         | _ ->
 
-        let toolContext = Nocfo.Tools.Runtime.ToolConfig.loadOrFail profile input output dryRun verbose
+        let toolContext = toolContext.Value
 
         match subcommand with
         | CliArgs.List _   -> list   toolContext (results.GetResult List)
@@ -882,7 +918,6 @@ let private run (parser: ArgumentParser<CliArgs>) argv =
         | CliArgs.Create _ -> create toolContext (results.GetResult Create)
         | CliArgs.Balance _   -> balance   toolContext (results.GetResult CliArgs.Balance)
         | CliArgs.Reconcile _ -> reconcile toolContext (results.GetResult CliArgs.Reconcile)
-        | CliArgs.Cashbook _  -> cashbook  toolContext (results.GetResult CliArgs.Cashbook)
         | _ ->
             eprintfn "%s" (parser.PrintUsage())
             async.Return ExitCodes.EX_USAGE

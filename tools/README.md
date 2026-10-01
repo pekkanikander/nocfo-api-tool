@@ -82,6 +82,7 @@ Read-only commands:
 - `reconcile`
 - `cashbook seed`
 - `cashbook check`
+- `cashbook match`
 
 Mutating commands:
 
@@ -124,6 +125,7 @@ Mutating commands:
 | `reconcile --left <source> --right <source> [-b <id>] [--from <date>] [--to <date>] [-a <number>] [--charset <c>] [--tolerance <amount>]` | Compares the daily balances of two sources | Exits `EX_DATAERR` when any day differs by more than `--tolerance` |
 | `cashbook seed -b <id>` | Streams the chart of accounts and writes a `rules.toml` skeleton for the cash-book verbs | The payment and fee accounts are left blank; every revenue and expense account becomes a commented-out rule stub |
 | `cashbook check -b <id> -r <rules.toml>` | Parses the rules file strictly and checks every account it names against the chart of accounts | One line per finding; a missing account is an error (exit 65), a name that differs from NoCFO's a warning; parse errors go to stderr |
+| `cashbook match -k <kassakirja.csv> -m <mobilepay.csv> -r <rules.toml> [--from <date>] [--to <date>]` | Matches the cash-book lines against the MobilePay Box export and writes `match.csv` | Local files only, no API; `--from`/`--to` restrict both inputs to the period; a malformed row is an error (exit 65) located by file and line |
 
 ### Reconciliation sources
 

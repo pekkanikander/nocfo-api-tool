@@ -8,8 +8,15 @@
     <Compile Include="Seed.fs" />
     <Compile Include="TomlReader.fs" />
     <Compile Include="Rules.fs" />
+    <Compile Include="CsvReader.fs" />
+    <Compile Include="Period.fs" />
+    <Compile Include="CashBook.fs" />
+    <Compile Include="MobilePay.fs" />
+    <Compile Include="Matching.fs" />
+    <Compile Include="Reports.fs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="Tomlyn" Version="0.17.0" />
   </ItemGroup>
 </Project>

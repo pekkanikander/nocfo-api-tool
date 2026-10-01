@@ -185,7 +185,7 @@ needs no action.
   `update contacts`, `update tags`; `delete accounts`, `delete contacts`, `delete documents`,
   `delete tags`; `create businesses`, `create accounts`, `create contacts`, `create tags`, and
   minimal `create documents`; plus `map accounts`, `balance`, `reconcile`, `statement`,
-  `cashbook seed` and `cashbook check`.
+  `cashbook seed`, `cashbook check` and `cashbook match`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,

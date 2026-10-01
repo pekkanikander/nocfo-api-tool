@@ -140,15 +140,32 @@ type CashbookCheckArgs =
             | BusinessId _ -> "Business identifier (Y-tunnus|VAT-code)."
             | Rules _      -> "The rules.toml to check."
 
+type CashbookMatchArgs =
+    | [< AltCommandLine("-k"); Mandatory >]       CashBook of path: string
+    | [< AltCommandLine("-m"); Mandatory >]       MobilePay of path: string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | CashBook _  -> "The cash book (kassakirja.csv)."
+            | MobilePay _ -> "The MobilePay Box export (CSV)."
+            | Rules _     -> "The rules.toml whose [mobilepay] and [matching] tables to match by."
+            | DateFrom _  -> "Earliest date of the book lines and transactions to match (YYYY-MM-DD)."
+            | DateTo _    -> "Latest date of the book lines and transactions to match (YYYY-MM-DD)."
+
 [<RequireSubcommand>]
 type CashbookArgs =
     | [< NoPrefix; SubCommand >]                  Seed of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Check of ParseResults<CashbookCheckArgs>
+    | [< NoPrefix; SubCommand >]                  Match of ParseResults<CashbookMatchArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Seed _  -> "Write a rules.toml skeleton from the chart of accounts."
             | Check _ -> "Check a rules.toml against the chart of accounts."
+            | Match _ -> "Match the cash book against a MobilePay Box export and write match.csv."
 
 [<RequireSubcommand>]
 type CliArgs =
