@@ -48,7 +48,7 @@ Every posted line needs an offset account. Signals, in priority order:
 
 | id | rule | status |
 | --- | --- | --- |
-| K1 | Rules file (`rules.toml`): `[[classification.income]]` and `[[classification.expense]]` lists, each rule an account number, a display name and one or more predicates. Income lines and MP payments in use the income list; till expenses and MP expenses use the expense list. A rule hits a line when every predicate it carries holds: `keywords`, the line's text contains one of the case-insensitive substrings; `no_text = true`, the line's text is blank; `from`/`to`, the line's date is within the inclusive window, a missing bound being open; `max_amount`, the line's unsigned amount is at most this; `min_per_day`, at least this many lines of the same day, book lines and MP transactions together, were classified to the rule's account by a preceding rule. A rule without any predicate is an error (V1). The date of a book line is `pvm` and of a MobilePay transaction its own date. The first rule that hits wins; file order is the priority. | P |
+| K1 | Rules file (`rules.toml`): `[[classification.income]]` and `[[classification.expense]]` lists, each rule an account number, a display name and one or more predicates. Income lines and MP payments in use the income list; till expenses and MP expenses use the expense list. A rule hits a line when every predicate it carries holds: `keywords`, the line's text contains one of the case-insensitive substrings; `no_text = true`, the line's text is blank; `from`/`to`, the line's date is within the inclusive window, a missing bound being open; `max_amount`, the line's unsigned amount is at most this; `min_per_day`, at least this many lines of the same day, book lines and MP transactions together, were classified to the rule's account by a preceding rule. A rule without any predicate is an error (V1). The date of a book line is `pvm` and of a MobilePay transaction its own date. The first rule that hits wins; file order is the priority. A rule may also carry `flag = true`: every line it classifies is posted as usual but reported `flagged` in `review.csv`, for rules whose evidence is circumstantial. | P |
 | K2 | The text of a cash-book line is `mita`. | P |
 | K3 | The text of a MobilePay transaction is its `Viesti` and, when the transaction is matched (M-rules) to a book line, that line's `mita` as well: keywords are sought in both and `no_text` holds only when both are blank. The rules are applied once per transaction, so file order decides between a hit on `Viesti` and a hit on `mita`. Applies to payments in and to MP expenses alike. | P |
 | K4 | Day-majority: an MP transaction still unclassified takes the account that at least `classification.majority_min` other MP transactions on the same day were classified to, if that account holds a strict majority of that day's classified MP transactions. | P |
@@ -95,7 +95,7 @@ the summary posting is a permitted combined entry.
 
 | id | rule | status |
 | --- | --- | --- |
-| P1 | `plan.csv` is the reviewable intermediate: `date;payment_account;offset_account;amount;lines;receipts;description`, sorted by date, payment account, offset account. `amount` is the change of the payment account (income positive, expenses and fees negative); `receipts` is the number of paper receipts expected (sum of `kuitti`). The documents CSV is rendered from it deterministically, every document a draft. | A |
+| P1 | `plan.csv` is the reviewable intermediate: `date;payment_account;offset_account;amount;lines;receipts;flagged;description`, sorted by date, payment account, offset account. `amount` is the change of the payment account (income positive, expenses and fees negative); `receipts` is the number of paper receipts expected (sum of `kuitti`); `flagged` is the number of its lines reported `flagged` (K1). The documents CSV is rendered from it deterministically, every document a draft. | A |
 | P2 | Income: `debet_account_id` = payment account, `credit_entries` = one entry on the offset account. Expense: `credit_account_id` = the paying account (cash or MobilePay), `debet_entries` = one entry on the expense account. Fee: as an expense from MobilePay on the fee account. | P |
 | P3 | Account numbers in `rules.toml` are resolved to ids once per run through the accounts list of the business. | P |
 | P4 | *Withdrawn: every document is a draft, see P1.* | — |
@@ -107,7 +107,7 @@ the summary posting is a permitted combined entry.
 | id | rule | status |
 | --- | --- | --- |
 | R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined. | P |
-| R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `unmarked-expense`, `unknown-type`. The informational tier `cash` appears only in `match.csv`. | P |
+| R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `assumed-cash`, `unmarked-expense`, `mp-expense-unbooked`, `flagged`, `unknown-type`. The informational tier `cash` appears only in `match.csv`. | P |
 | R3 | Amounts are `decimal` end to end (house rule). | A |
 
 ## 7. Rules file
@@ -172,3 +172,4 @@ nocfo cashbook seed   -b <slug>                                                 
 - 2026-09-30 — Unmarked expenses were paid from the till: posted as cash with a receipt reminder in `review.csv`; the reimbursements role is dropped (M10 revised again).
 - 2026-09-30 — Rules file validated strictly and against live accounts (V1–V2); `seed` produces a skeleton only (V3).
 - 2026-10-01 — The cafe rule is an ordinary rule: predicates `no_text`, `max_amount` and `min_per_day` added to K1, the `[classification.cafe]` table dropped (K6). A MobilePay transaction's text is `Viesti` and the matched `mita` together, one pass (K3).
+- 2026-10-01 — A rule may carry `flag = true`: its lines are reported `flagged` in `review.csv` and counted per document in `plan.csv` (K1, R2, P1).
