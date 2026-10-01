@@ -37,5 +37,7 @@
     <Compile Include="CashBookTests.fs" />
     <Compile Include="MobilePayTests.fs" />
     <Compile Include="MatchingTests.fs" />
+    <Compile Include="ClassificationTests.fs" />
+    <Compile Include="PlanTests.fs" />
   </ItemGroup>
 </Project>

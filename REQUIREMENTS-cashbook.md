@@ -48,14 +48,14 @@ Every posted line needs an offset account. Signals, in priority order:
 
 | id | rule | status |
 | --- | --- | --- |
-| K1 | Rules file (`rules.toml`): `[[classification.income]]` and `[[classification.expense]]` lists, each rule an account number, a display name and one or more predicates. Income lines and MP payments in use the income list; till expenses and MP expenses use the expense list. A rule hits a line when every predicate it carries holds: `keywords`, the line's text contains one of the case-insensitive substrings; `no_text = true`, the line's text is blank; `from`/`to`, the line's date is within the inclusive window, a missing bound being open; `max_amount`, the line's unsigned amount is at most this; `min_per_day`, at least this many lines of the same day, book lines and MP transactions together, were classified to the rule's account by a preceding rule. A rule without any predicate is an error (V1). The date of a book line is `pvm` and of a MobilePay transaction its own date. The first rule that hits wins; file order is the priority. A rule may also carry `flag = true`: every line it classifies is posted as usual but reported `flagged` in `review.csv`, for rules whose evidence is circumstantial. | P |
-| K2 | The text of a cash-book line is `mita`. | P |
-| K3 | The text of a MobilePay transaction is its `Viesti` and, when the transaction is matched (M-rules) to a book line, that line's `mita` as well: keywords are sought in both and `no_text` holds only when both are blank. The rules are applied once per transaction, so file order decides between a hit on `Viesti` and a hit on `mita`. Applies to payments in and to MP expenses alike. | P |
-| K4 | Day-majority: an MP transaction still unclassified takes the account that at least `classification.majority_min` other MP transactions on the same day were classified to, if that account holds a strict majority of that day's classified MP transactions. | P |
-| K5 | Same-amount: an MP transaction still unclassified that has the same amount that at least `classification.same_amount_min` other MP transactions on the same or adjacent day have, is classified like the majority of those having the same amount. | P |
-| K6 | Domain-specific rules need no code. The cafe rule is a K1 rule with `no_text`, `max_amount` and `min_per_day`, placed last in the income list: an unmarked transaction of at most `max_amount` on a day on which the preceding rules already put at least `min_per_day` lines on the cafe account goes there too. | P |
-| K7 | Otherwise the item goes to `review.csv` with reason `unclassified` and is still recorded, as a draft with the payment account set and no offset account, which is the shape NoCFO's own bank imports have; the bookkeeper completes it in NoCFO. | P |
-| K8 | Fees classify to `[accounts].fees` unconditionally. | P |
+| K1 | Rules file (`rules.toml`): `[[classification.income]]` and `[[classification.expense]]` lists, each rule an account number, a display name and one or more predicates. Income lines and MP payments in use the income list; till expenses and MP expenses use the expense list. A rule hits a line when every predicate it carries holds: `keywords`, the line's text contains one of the case-insensitive substrings; `no_text = true`, the line's text is blank; `from`/`to`, the line's date is within the inclusive window, a missing bound being open; `max_amount`, the line's unsigned amount is at most this; `min_per_day`, at least this many lines of the same day, book lines and MP transactions together, were classified to the rule's account by a preceding rule. A rule without any predicate is an error (V1). The date of a book line is `pvm` and of a MobilePay transaction its own date. The first rule that hits wins; file order is the priority. A rule may also carry `flag = true`: every line it classifies is posted as usual but reported `flagged` in `review.csv`, for rules whose evidence is circumstantial. | I |
+| K2 | The text of a cash-book line is `mita`. | I |
+| K3 | The text of a MobilePay transaction is its `Viesti` and, when the transaction is matched (M-rules) to a book line, that line's `mita` as well: keywords are sought in both and `no_text` holds only when both are blank. The rules are applied once per transaction, so file order decides between a hit on `Viesti` and a hit on `mita`. Applies to payments in and to MP expenses alike. | I |
+| K4 | Day-majority: an MP transaction still unclassified takes the account that at least `classification.majority_min` other MP transactions on the same day were classified to, if that account holds a strict majority of that day's classified MP transactions. | I |
+| K5 | Same-amount: an MP transaction still unclassified that has the same amount that at least `classification.same_amount_min` other MP transactions on the same or adjacent day have, is classified like the majority of those having the same amount. | I |
+| K6 | Domain-specific rules need no code. The cafe rule is a K1 rule with `no_text`, `max_amount` and `min_per_day`, placed last in the income list: an unmarked transaction of at most `max_amount` on a day on which the preceding rules already put at least `min_per_day` lines on the cafe account goes there too. | I |
+| K7 | Otherwise the item goes to `review.csv` with reason `unclassified` and is still recorded, as a draft with the payment account set and no offset account, which is the shape NoCFO's own bank imports have; the bookkeeper completes it in NoCFO. It is one document on its own, never coalesced, with `?` for the offset name in its description (C5). | I |
+| K8 | Fees classify to `[accounts].fees` unconditionally. | I |
 
 ## 3. Matching (book ↔ MobilePay)
 
@@ -73,20 +73,20 @@ income lines, MP expenses for expense lines) within the window, which runs from
 | M5 | Near miss: as M4 but the sum differs by at most `matching.tolerance`. Reported as `contradiction`; MobilePay wins, nothing is corrected in the book. | I |
 | M6 | An MP-marked book line with no match at any tier is reported `book-only`. It is still not posted. | I |
 | M7 | A cash-marked book line whose amount equals an unmatched same-day MP transaction is reported `possible-mp` as a warning. It is still posted as cash. | I |
-| M8 | When several assignments satisfy M1–M5, choose the one with the lowest cost: unmatched lines, then near misses, then total date distance, then subset size; a transaction whose `Viesti` shares a word with the book `mita` lowers the cost. Weights live in `[matching]`. Ties are reported `ambiguous` and left unmatched. | I |
-| M9 | An unmarked income line that matches at M1–M4 is treated as MP (hint only, not posted). One that does not match is treated as cash and reported `assumed-cash`. | I |
+| M8 | When several assignments satisfy M1–M5, choose the one with the lowest cost: unmatched lines, then near misses, then total date distance, then subset size; a transaction whose `Viesti` shares a word with the book `mita` lowers the cost. Weights live in `[matching]`. Ties are reported `ambiguous` and left unmatched; an ambiguous line is not posted until `match.csv` settles it (section 8). | I |
+| M9 | An unmarked income line that matches at M1–M4 is treated as MP (hint only, not posted). One that does not match is treated as cash and reported `assumed-cash`. One left ambiguous (M8) is not posted either. | I |
 | M10 | An unmarked expense line was paid from the till: it is posted as a cash expense and reported `unmarked-expense` in `review.csv`, so that the paper receipt is checked. | I |
-| M11 | An MP-marked expense line matches MP expense rows with M1–M8 applied to the negative amounts. An MP expense row with no book match is still recorded (K3 on `Viesti`) but reported `mp-expense-unbooked`, since for now every MP expense SHOULD also be in the book. | P |
+| M11 | An MP-marked expense line matches MP expense rows with M1–M8 applied to the negative amounts. An MP expense row with no book match is still recorded (K3 on `Viesti`) but reported `mp-expense-unbooked`, since for now every MP expense SHOULD also be in the book. | I |
 
 ## 4. Coalescing
 
 | id | rule | status |
 | --- | --- | --- |
-| C1 | Postable lines are grouped by (date, payment account, offset account) and summed; one document per group. | A |
-| C2 | Runs of consecutive days with the same (payment account, offset account) are merged into one document dated the last day, when `[coalesce.<payment>]` allows: `max_days` bounds the run length and `max_gap` the allowed gap between days (default 1, i.e. strictly consecutive). Default `max_days` is 3 for cash and 4 for MobilePay. | P |
-| C3 | Fees use the same mechanism with their own `[coalesce.fees]` block, default `max_days = 7`. | P |
-| C4 | Expenses paid from the till are never coalesced: one document per book line, receipt count in the description. | P |
-| C5 | Description: `<marker> <payment name>/<offset name> <date>[–<last date>] (<n>)`; for a till expense `<marker> Kassa/<offset name> <date> <mita> (<k> kuittia)`. The marker is `[posting].marker`, names come from `rules.toml`. | P |
+| C1 | Postable lines are grouped by (date, payment account, offset account) and summed; one document per group. | I |
+| C2 | Runs of consecutive days with the same (payment account, offset account) are merged into one document dated the last day, when `[coalesce.<payment>]` allows: `max_days` bounds the number of days with postings in the run and `max_gap` the allowed gap between them (default 1, i.e. strictly consecutive). Default `max_days` is 3 for cash and 4 for MobilePay. | I |
+| C3 | Fees use the same mechanism with their own `[coalesce.fees]` block, default `max_days = 7`. | I |
+| C4 | Expenses paid from the till are never coalesced: one document per book line, receipt count in the description. | I |
+| C5 | Description: `<marker> <payment name>/<offset name> <date>[–<last date>] (<n>)`; for a till expense `<marker> Kassa/<offset name> <date> <mita> (<k> kuittia)`. The marker is `[posting].marker`, names come from `rules.toml`. | I |
 
 The paper book is the daily record the law requires for cash; it is archived for six years, so
 the summary posting is a permitted combined entry.
@@ -95,7 +95,7 @@ the summary posting is a permitted combined entry.
 
 | id | rule | status |
 | --- | --- | --- |
-| P1 | `plan.csv` is the reviewable intermediate: `date;payment_account;offset_account;amount;lines;receipts;flagged;description`, sorted by date, payment account, offset account. `amount` is the change of the payment account (income positive, expenses and fees negative); `receipts` is the number of paper receipts expected (sum of `kuitti`); `flagged` is the number of its lines reported `flagged` (K1). The documents CSV is rendered from it deterministically, every document a draft. | A |
+| P1 | `plan.csv` is the reviewable intermediate: `date;payment_account;offset_account;amount;lines;receipts;flagged;description`, sorted by date, payment account, offset account. `amount` is the change of the payment account (income positive, expenses and fees negative); `receipts` is the number of paper receipts expected (sum of `kuitti`); `flagged` is the number of its lines reported `flagged` (K1). The documents CSV is rendered from it deterministically, every document a draft. | I |
 | P2 | Income: `debet_account_id` = payment account, `credit_entries` = one entry on the offset account. Expense: `credit_account_id` = the paying account (cash or MobilePay), `debet_entries` = one entry on the expense account. Fee: as an expense from MobilePay on the fee account. | P |
 | P3 | Account numbers in `rules.toml` are resolved to ids once per run through the accounts list of the business. | P |
 | P4 | *Withdrawn: every document is a draft, see P1.* | — |
@@ -107,7 +107,7 @@ the summary posting is a permitted combined entry.
 | id | rule | status |
 | --- | --- | --- |
 | R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined. | I |
-| R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `assumed-cash`, `unmarked-expense`, `mp-expense-unbooked`, `flagged`, `unknown-type`. The informational tier `cash` appears only in `match.csv`. | P |
+| R2 | `review.csv`: `source;ref;date;amount;text;reason`; source `book` with ref `L<file line>`, or `mp` with the transaction id. Reasons: `unclassified`, `ambiguous`, `book-only`, `contradiction`, `possible-mp`, `assumed-cash`, `unmarked-expense`, `mp-expense-unbooked`, `flagged`, `unknown-type`. The informational tier `cash` appears only in `match.csv`. | I |
 | R3 | Amounts are `decimal` end to end (house rule). | A |
 
 ## 7. Rules file
@@ -174,3 +174,7 @@ nocfo cashbook seed   -b <slug>                                                 
 - 2026-10-01 — The cafe rule is an ordinary rule: predicates `no_text`, `max_amount` and `min_per_day` added to K1, the `[classification.cafe]` table dropped (K6). A MobilePay transaction's text is `Viesti` and the matched `mita` together, one pass (K3).
 - 2026-10-01 — Matching implemented: the M8 cost chooses the assignment and the tier is read off the chosen subset; same-day transactions of the same amount are interchangeable, the earliest taken (M2 generalised); an unmarked income line never takes a near miss (M9); lines sharing no candidate are assigned independently.
 - 2026-10-01 — A rule may carry `flag = true`: its lines are reported `flagged` in `review.csv` and counted per document in `plan.csv` (K1, R2, P1).
+- 2026-10-01 — `max_days` counts the days with postings in a run, not calendar days (C2).
+- 2026-10-01 — An unclassified item is one document on its own, `?` for the offset name (K7, C5).
+- 2026-10-01 — An ambiguous line is not posted until `match.csv` settles it (M8, M9).
+- 2026-10-01 — Plan implemented: `cashbook plan` classifies (K1–K8), coalesces (C1–C5) and writes `plan.csv` (P1) and `review.csv` (R2); `--match` takes a `match.csv` as given, its tiers and ids checked against the inputs.

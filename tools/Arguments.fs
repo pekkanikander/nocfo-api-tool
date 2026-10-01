@@ -155,17 +155,38 @@ type CashbookMatchArgs =
             | DateFrom _  -> "Earliest date of the book lines and transactions to match (YYYY-MM-DD)."
             | DateTo _    -> "Latest date of the book lines and transactions to match (YYYY-MM-DD)."
 
+type CashbookPlanArgs =
+    | [< AltCommandLine("-k"); Mandatory >]       CashBook of path: string
+    | [< AltCommandLine("-m"); Mandatory >]       MobilePay of path: string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
+    | Match of path: string
+    | Review of path: string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | CashBook _  -> "The cash book (kassakirja.csv)."
+            | MobilePay _ -> "The MobilePay Box export (CSV)."
+            | Rules _     -> "The rules.toml to classify and coalesce by."
+            | Match _     -> "A match.csv whose tiers and transactions to take as given instead of matching afresh."
+            | Review _    -> "Where to write review.csv; not written when left out."
+            | DateFrom _  -> "Earliest date of the book lines and transactions to plan (YYYY-MM-DD)."
+            | DateTo _    -> "Latest date of the book lines and transactions to plan (YYYY-MM-DD)."
+
 [<RequireSubcommand>]
 type CashbookArgs =
     | [< NoPrefix; SubCommand >]                  Seed of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Check of ParseResults<CashbookCheckArgs>
     | [< NoPrefix; SubCommand >]                  Match of ParseResults<CashbookMatchArgs>
+    | [< NoPrefix; SubCommand >]                  Plan of ParseResults<CashbookPlanArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Seed _  -> "Write a rules.toml skeleton from the chart of accounts."
             | Check _ -> "Check a rules.toml against the chart of accounts."
             | Match _ -> "Match the cash book against a MobilePay Box export and write match.csv."
+            | Plan _  -> "Plan the documents of the cash book and a MobilePay Box export and write plan.csv."
 
 [<RequireSubcommand>]
 type CliArgs =

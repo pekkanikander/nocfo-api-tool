@@ -52,13 +52,13 @@ let private outcome (lines: CashBookLine list) (transactions: Transaction list) 
 let ``Of two equal same-day payments the earliest by time of day is taken (M2)`` () =
     let later = payment "1" "19:00" "" 10M
     let earlier = payment "9" "16:00" "" 10M
-    test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [ later; earlier ] = [ Tier.M2, "9", "" ] @>
+    test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [ later; earlier ] = [ Tier.M2, "9", None ] @>
 
 [<Fact>]
 let ``Of two equal same-day payments the one whose Viesti shares a word with mita is taken (M2)`` () =
     let later = payment "1" "19:00" "Tanssit" 10M
     let earlier = payment "9" "16:00" "" 10M
-    test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [ later; earlier ] = [ Tier.M2, "1", "" ] @>
+    test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [ later; earlier ] = [ Tier.M2, "1", None ] @>
 
 [<Fact>]
 let ``Two same-day exact subsets of the same cost leave the line ambiguous and its candidates unmatched (M8)`` () =
@@ -75,37 +75,37 @@ let ``A MobilePay-marked line with no match is book-only, and the transactions s
     let fee = { payment "f-1" "16:00" "" -2M with kind = TransactionKind.Fee }
     let other = payment "1" "16:00" "" 7M
     let matches = Matching.run rules (book [ line PaymentMethod.MobilePay "Tanssit" 10M ]) [ fee; other ]
-    test <@ matches.lines |> List.map (fun lineMatch -> lineMatch.tier, lineMatch.note) = [ Tier.BookOnly, "" ] @>
+    test <@ matches.lines |> List.map (fun lineMatch -> lineMatch.tier, lineMatch.note) = [ Tier.BookOnly, None ] @>
     test <@ matches.unmatched = [ fee; other ] @>
 
 [<Fact>]
 let ``An unmarked income line with no match is assumed cash (M9)`` () =
     test <@ outcome [ line PaymentMethod.Unmarked "Tanssit" 10M ] [ payment "1" "16:00" "" 7M ]
-              = [ Tier.Cash, "", "assumed-cash" ] @>
+              = [ Tier.Cash, "", Some Note.AssumedCash ] @>
 
 [<Fact>]
 let ``A near miss matches a MobilePay-marked line but not an unmarked one (M5, M9)`` () =
     let near = payment "1" "16:00" "" 10.20M
     test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [ near ]
-              = [ Tier.M5, "1", "contradiction: MobilePay wins" ] @>
-    test <@ outcome [ line PaymentMethod.Unmarked "Tanssit" 10M ] [ near ] = [ Tier.Cash, "", "assumed-cash" ] @>
+              = [ Tier.M5, "1", Some Note.Contradiction ] @>
+    test <@ outcome [ line PaymentMethod.Unmarked "Tanssit" 10M ] [ near ] = [ Tier.Cash, "", Some Note.AssumedCash ] @>
 
 [<Fact>]
 let ``A MobilePay-marked expense line matches a MobilePay expense, both negative (M11)`` () =
     let expense = { payment "e-1" "16:00" "Maito" -13M with kind = TransactionKind.Expense }
     let income = payment "1" "16:00" "" 13M
-    test <@ outcome [ line PaymentMethod.MobilePay "Lidl" -13M ] [ income; expense ] = [ Tier.M1, "e-1", "" ] @>
+    test <@ outcome [ line PaymentMethod.MobilePay "Lidl" -13M ] [ income; expense ] = [ Tier.M1, "e-1", None ] @>
 
 [<Fact>]
 let ``A cash-marked line is never matched but an unmatched same-day equal transaction is noted (M7)`` () =
     let twin = payment "1" "16:00" "" 10M
-    test <@ outcome [ line PaymentMethod.Cash "Tanssit" 10M ] [ twin ] = [ Tier.Cash, "", "possible-mp: 1" ] @>
+    test <@ outcome [ line PaymentMethod.Cash "Tanssit" 10M ] [ twin ] = [ Tier.Cash, "", Some (Note.PossibleMp [ twin ]) ] @>
 
 [<Fact>]
 let ``A transaction serves one line only, the cheaper assignment winning (M8)`` () =
     let only = payment "1" "16:00" "" 10M
     test <@ outcome [ line PaymentMethod.MobilePay "a" 10M; line PaymentMethod.MobilePay "b" 10M ] [ only ]
-              = [ Tier.M1, "1", ""; Tier.BookOnly, "", "" ] @>
+              = [ Tier.M1, "1", None; Tier.BookOnly, "", None ] @>
 
 // ── Period ────────────────────────────────────────────────────────────────────
 

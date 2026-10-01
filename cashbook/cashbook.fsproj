@@ -13,6 +13,8 @@
     <Compile Include="CashBook.fs" />
     <Compile Include="MobilePay.fs" />
     <Compile Include="Matching.fs" />
+    <Compile Include="Classification.fs" />
+    <Compile Include="Plan.fs" />
     <Compile Include="Reports.fs" />
   </ItemGroup>
   <ItemGroup>

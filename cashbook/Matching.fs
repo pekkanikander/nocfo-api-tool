@@ -15,13 +15,44 @@ type Tier =
     | BookOnly
     | Ambiguous
 
-/// The outcome of matching one book line: its tier, the transactions matched to it, and the note the
-/// reports carry (M5, M7, M9, M10).
+module Tier =
+
+    let private names =
+        [ Tier.M1, "M1"; Tier.M2, "M2"; Tier.M3, "M3"; Tier.M4, "M4"; Tier.M5, "M5"
+          Tier.Cash, "cash"; Tier.BookOnly, "book-only"; Tier.Ambiguous, "ambiguous" ]
+
+    /// The tier as `match.csv` writes it (R1).
+    let describe (tier: Tier) = names |> List.find (fun (candidate, _) -> candidate = tier) |> snd
+
+    /// A tier as `match.csv` writes it, read back.
+    let parse (text: string) = names |> List.tryFind (fun (_, name) -> name = text) |> Option.map fst
+
+/// What matching says about a line beyond its tier: MobilePay wins a near miss (M5), a cash line may have
+/// been paid by MobilePay after all (M7), an unmarked line is assumed cash (M9) or a till expense (M10).
+[<RequireQualifiedAccess>]
+type Note =
+    | Contradiction
+    | PossibleMp of Transaction list
+    | AssumedCash
+    | UnmarkedExpense
+
+module Note =
+
+    /// The reason `review.csv` gives for the note (R2).
+    let reason (note: Note) =
+        match note with
+        | Note.Contradiction   -> "contradiction"
+        | Note.PossibleMp _    -> "possible-mp"
+        | Note.AssumedCash     -> "assumed-cash"
+        | Note.UnmarkedExpense -> "unmarked-expense"
+
+/// The outcome of matching one book line: its tier, the transactions matched to it, and what the reports
+/// note about it.
 type LineMatch =
     { line:         CashBookLine
       tier:         Tier
       transactions: Transaction list
-      note:         string }
+      note:         Note option }
 
 /// What matching made of a book and an export: every book line in file order, and the transactions no
 /// line claimed.
@@ -181,19 +212,32 @@ module Matching =
                 if line.candidates |> List.exists twin then Tier.M2 else Tier.M1
             | _ -> Tier.M3
 
-    /// What the reports say about a line: MobilePay wins a near miss (M5); a cash line may have been paid
-    /// by MobilePay after all (M7); an unmarked line is assumed cash (M9) or a till expense (M10).
+    /// What the reports note about a line of the tier (M5, M7, M9, M10).
     let private note (unmatched: Transaction list) (line: CashBookLine) (tier: Tier) =
         match tier, line.method with
-        | Tier.M5, _ -> "contradiction: MobilePay wins"
-        | Tier.Cash, PaymentMethod.Unmarked -> if line.amount > 0M then "assumed-cash" else "unmarked-expense"
+        | Tier.M5, _ -> Some Note.Contradiction
+        | Tier.Cash, PaymentMethod.Unmarked ->
+            Some (if line.amount > 0M then Note.AssumedCash else Note.UnmarkedExpense)
         | Tier.Cash, PaymentMethod.Cash ->
             let sameDayAndAmount (transaction: Transaction) =
                 transaction.kind = kindOf line && transaction.date = line.date && transaction.amount = line.amount
             match unmatched |> List.filter sameDayAndAmount with
-            | [] -> ""
-            | possible -> "possible-mp: " + ids possible
-        | _ -> ""
+            | [] -> None
+            | possible -> Some (Note.PossibleMp possible)
+        | _ -> None
+
+    /// The matches of lines whose tiers and transactions are known, as a `match.csv` gives them (section 8):
+    /// a line's transactions in id order as it lists them, the notes read off them, and the transactions no
+    /// line takes unmatched.
+    let ofTiers (tiers: (CashBookLine * Tier * Transaction list) list) (transactions: Transaction list) : Matches =
+        let matched = tiers |> List.collect (fun (_, _, taken) -> taken) |> idSet
+        let unmatched = transactions |> List.filter (fun transaction -> not (Set.contains transaction.id matched))
+        let lineMatch (line: CashBookLine, tier: Tier, taken: Transaction list) =
+            { line         = line
+              tier         = tier
+              transactions = taken |> List.sortBy (fun transaction -> transaction.id)
+              note         = note unmatched line tier }
+        { lines = List.map lineMatch tiers; unmatched = unmatched }
 
     /// Matches the book lines to the transactions (section 3): every line gets a tier, a matched line its
     /// transactions, and the transactions no line claimed are kept for `plan`.
@@ -218,9 +262,7 @@ module Matching =
                     | Some subset -> tier line subset, subset.transactions
                 line.line.file_line, outcome)
             |> Map.ofList
-        let matched = outcomes |> Map.values |> Seq.collect snd |> List.ofSeq |> idSet
-        let unmatched = transactions |> List.filter (fun transaction -> not (Set.contains transaction.id matched))
-        let lineMatch (line: CashBookLine) =
-            let tier, transactions = outcomes |> Map.tryFind line.file_line |> Option.defaultValue (Tier.Cash, [])
-            { line = line; tier = tier; transactions = transactions; note = note unmatched line tier }
-        { lines = List.map lineMatch lines; unmatched = unmatched }
+        let outcome (line: CashBookLine) =
+            let tier, taken = outcomes |> Map.tryFind line.file_line |> Option.defaultValue (Tier.Cash, [])
+            line, tier, taken
+        ofTiers (List.map outcome lines) transactions

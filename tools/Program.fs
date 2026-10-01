@@ -838,41 +838,72 @@ let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckAr
             else ExitCodes.EX_OK
     }
 
+/// The rules, and the book lines and transactions of the period, as `match` and `plan` read them.
+let private readCashbookInputs (rulesPath: string) (bookPath: string) (exportPath: string)
+                               (dateFrom: string option) (dateTo: string option) =
+    match parseDay "--from" dateFrom, parseDay "--to" dateTo with
+    | Error error, _
+    | _, Error error -> Error error
+    | Ok dateFrom, Ok dateTo ->
+
+    match readCashbookFile rulesPath Nocfo.Cashbook.Rules.parse with
+    | Error error -> Error error
+    | Ok rules ->
+
+    let export = Nocfo.Cashbook.MobilePay.read rules.mobilepay
+    match readCashbookFile bookPath Nocfo.Cashbook.CashBook.read, readCashbookFile exportPath export with
+    | Error error, _
+    | _, Error error -> Error error
+    | Ok lines, Ok transactions ->
+
+    let period : Nocfo.Cashbook.Period = { from_date = dateFrom; to_date = dateTo }
+    let within = Nocfo.Cashbook.Period.contains period
+    Ok (rules,
+        lines |> List.filter (fun line -> within line.date),
+        transactions |> List.filter (fun transaction -> within transaction.date))
+
 let cashbookMatch (output: TextWriter) (args: ParseResults<CashbookMatchArgs>) =
     async {
-        match parseDay "--from" (args.TryGetResult CashbookMatchArgs.DateFrom),
-              parseDay "--to" (args.TryGetResult CashbookMatchArgs.DateTo) with
-        | Error error, _
-        | _, Error error -> return mapDomainErrorToExitCode error
-        | Ok dateFrom, Ok dateTo ->
-
-        match readCashbookFile (args.GetResult CashbookMatchArgs.Rules) Nocfo.Cashbook.Rules.parse with
+        match readCashbookInputs (args.GetResult CashbookMatchArgs.Rules) (args.GetResult CashbookMatchArgs.CashBook)
+                                 (args.GetResult CashbookMatchArgs.MobilePay) (args.TryGetResult CashbookMatchArgs.DateFrom)
+                                 (args.TryGetResult CashbookMatchArgs.DateTo) with
         | Error error -> return mapDomainErrorToExitCode error
-        | Ok rules ->
+        | Ok (rules, lines, transactions) ->
 
-        let export = Nocfo.Cashbook.MobilePay.read rules.mobilepay
-        match readCashbookFile (args.GetResult CashbookMatchArgs.CashBook) Nocfo.Cashbook.CashBook.read,
-              readCashbookFile (args.GetResult CashbookMatchArgs.MobilePay) export with
-        | Error error, _
-        | _, Error error -> return mapDomainErrorToExitCode error
-        | Ok lines, Ok transactions ->
-
-        let period : Nocfo.Cashbook.Period = { from_date = dateFrom; to_date = dateTo }
-        let within = Nocfo.Cashbook.Period.contains period
-        let matches =
-            Nocfo.Cashbook.Matching.run rules
-                (lines |> List.filter (fun line -> within line.date))
-                (transactions |> List.filter (fun transaction -> within transaction.date))
-        output.Write (Nocfo.Cashbook.MatchReport.render matches)
+        output.Write (Nocfo.Cashbook.MatchReport.render (Nocfo.Cashbook.Matching.run rules lines transactions))
         return ExitCodes.EX_OK
     }
 
-/// `match` reads local files only; the other verbs need the chart of accounts, hence the API.
+let cashbookPlan (output: TextWriter) (args: ParseResults<CashbookPlanArgs>) =
+    async {
+        match readCashbookInputs (args.GetResult CashbookPlanArgs.Rules) (args.GetResult CashbookPlanArgs.CashBook)
+                                 (args.GetResult CashbookPlanArgs.MobilePay) (args.TryGetResult CashbookPlanArgs.DateFrom)
+                                 (args.TryGetResult CashbookPlanArgs.DateTo) with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok (rules, lines, transactions) ->
+
+        let matches =
+            match args.TryGetResult CashbookPlanArgs.Match with
+            | None -> Ok (Nocfo.Cashbook.Matching.run rules lines transactions)
+            | Some path -> readCashbookFile path (Nocfo.Cashbook.MatchReport.read lines transactions)
+        match matches with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok matches ->
+
+        let plan = Nocfo.Cashbook.Plan.build rules matches
+        output.Write (Nocfo.Cashbook.PlanReport.render plan.documents)
+        args.TryGetResult CashbookPlanArgs.Review
+        |> Option.iter (fun path -> File.WriteAllText(path, Nocfo.Cashbook.ReviewReport.render plan.reviews))
+        return ExitCodes.EX_OK
+    }
+
+/// `match` and `plan` read local files only; the other verbs need the chart of accounts, hence the API.
 let cashbook (toolContext: Lazy<ToolContext>) (output: TextWriter) (args: ParseResults<CashbookArgs>) =
     match args.GetSubCommand() with
     | CashbookArgs.Seed seedArgs   -> cashbookSeed  toolContext.Value seedArgs
     | CashbookArgs.Check checkArgs -> cashbookCheck toolContext.Value checkArgs
     | CashbookArgs.Match matchArgs -> cashbookMatch output matchArgs
+    | CashbookArgs.Plan planArgs   -> cashbookPlan  output planArgs
 
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =
