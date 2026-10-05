@@ -2,9 +2,9 @@
 
 Thin Argu-based CLI built on top of the shared `hawaii-client` library.
 
-Treat this as the user-facing path for listing businesses/accounts/contacts/documents,
-updating accounts and contacts from CSV, deleting accounts/contacts/documents,
-mapping account IDs between environments, and creating minimal documents from CSV.
+Treat this as the user-facing path for listing businesses/accounts/contacts/documents/tags,
+updating accounts, contacts and tags from CSV, deleting accounts/contacts/documents/tags,
+mapping account IDs between environments, and creating tags and minimal documents from CSV.
 
 ## Quick start
 
@@ -76,6 +76,7 @@ Read-only commands:
 - `list accounts`
 - `list contacts`
 - `list documents`
+- `list tags`
 - `map accounts`
 - `balance`
 - `reconcile`
@@ -85,13 +86,16 @@ Mutating commands:
 - `update businesses`
 - `update accounts`
 - `update contacts`
+- `update tags`
 - `delete accounts`
 - `delete contacts`
 - `delete documents`
+- `delete tags`
 - `create businesses`
 - `create accounts`
 - `create contacts`
 - `create documents`
+- `create tags`
 
 | Command | Description | Notes |
 | --- | --- | --- |
@@ -99,17 +103,21 @@ Mutating commands:
 | `list accounts -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams accounts, hydrates them, writes CSV | Rows are currently emitted in API order |
 | `list contacts -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams contacts, hydrates them, writes CSV | Contacts are emitted from the `/contacts/` endpoint |
 | `list documents -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams documents, hydrates them, writes CSV | Document mutation commands are separate (`delete documents`, minimal `create documents`) |
+| `list tags -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams tags, writes CSV | Tags are emitted from the `/tags/` endpoint |
 | `update businesses [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current business by `slug`, and emits PATCH requests for changed fields only | CSV **must** include `slug`; rows are processed in CSV order |
 | `update accounts -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current account by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
 | `update contacts -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current contact by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
+| `update tags -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current tag by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
 | `delete accounts -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `delete contacts -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `delete documents -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
+| `delete tags -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | The API detaches a deleted tag from its documents |
 | `map accounts -b <id>` | Resolves source+target business contexts and emits `source_id,target_id,number` matches by account `number` | Prints missing-target warnings to stderr; exit code is `EX_DATAERR` when warnings exist |
 | `create businesses [--fields …]` | Reads business-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `slug`, optional `business_id`, and optional `form` |
 | `create accounts -b <id> [--fields …]` | Reads account-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `number`, `name`, optional `type`, `description`, and `opening_balance` |
 | `create contacts -b <id> [--fields …]` | Reads contact-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `type`, `customer_id`, `contact_business_id`, `notes`, and `phone_number` |
 | `create documents -b <id> [--account-id-map <path>] [--strict] [--fields …]` | Reads minimal document-create CSV and POSTs documents sequentially | Optional blueprint account-id remap via mapping CSV |
+| `create tags -b <id> [--fields …]` | Reads tag-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `description` and `color`; the API rejects a name already in use |
 | `balance -b <id> --from <date> --to <date> [-a <numbers>…] [--account-type <t>] [--daily] [--fields …]` | Fetches the ledger report for the period and writes a rolling balance | `--daily` emits `date,balance` and needs the selection to name exactly one account |
 | `reconcile --left <source> --right <source> [-b <id>] [--from <date>] [--to <date>] [-a <number>] [--charset <c>] [--tolerance <amount>]` | Compares the daily balances of two sources | Exits `EX_DATAERR` when any day differs by more than `--tolerance` |
 
@@ -140,8 +148,8 @@ Still unimplemented:
 - `id` is always required when reading updates or deletes; if `--fields` is present, the CSV header still has to include it.
 - Update rows are handled one CSV row at a time: the CLI fetches the current server-side entity by `id`, normalizes the requested patch against that fresh value, and only then issues a PATCH when something changed.
 - Repeated `id` values in update CSV input are allowed. They are processed sequentially, so a later row sees the result of earlier successful PATCHes for the same `id`.
-- Collections of strings are stored as `;`-separated lists. On output, `option<_>` values use empty cells for `None`.
-- On update, an empty cell means "clear this field" — the columns the CSV carries are exactly the fields the caller is speaking about. Leave a field unchanged by dropping its column, and a row untouched by omitting the row. Only fields with an empty value (text) can be cleared this way; an empty cell in any other column is rejected rather than ignored.
+- Collections are stored as `;`-separated lists, e.g. a document's `tag_ids` as `3;5`; a JSON array is also accepted on input. On output, `option<_>` values use empty cells for `None`.
+- On update, an empty cell means "clear this field" — the columns the CSV carries are exactly the fields the caller is speaking about. Leave a field unchanged by dropping its column, and a row untouched by omitting the row. Only fields with an empty value (text, or a list such as `tag_ids`) can be cleared this way; an empty cell in any other column is rejected rather than ignored.
 - On create, an empty cell simply supplies nothing, since there is no prior value to clear.
 - Extra columns in the input are ignored when `--fields` is present; otherwise we validate that every header maps to a property.
 
@@ -217,15 +225,15 @@ The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` fr
 
 ## Internals
 
-- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`). `--fields`, `--profile`, and `--dry-run` live at the top level.
+- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`, `tags`). `--fields`, `--profile`, and `--dry-run` live at the top level.
 - **Config** (`Config.fs`): reads `~/.config/nocfo/config.toml` and resolves a named profile into `ProfileSettings`.
 - **Runtime + Streams** (`Tools.fs`): layers profile settings under env vars, builds `AccountingContext`, and routes CSV readers/writers.
 - **Program flow** (`Program.fs`):
-  - `list` commands: stream via `Streams.streamBusinesses`, `Streams.streamAccounts`, `Streams.streamContacts`, or `Streams.streamDocuments`, hydrate rows (`Streams.hydrateAndUnwrap`), write CSV lazily.
-  - `update businesses/accounts/contacts`: read CSV into repo-owned delta records, fetch the current entity (`slug` for businesses, `id` for accounts/contacts), normalize against that fresh API state, and PATCH immediately when something changed.
-  - `delete` accounts/contacts/documents: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
+  - `list` commands: stream via `Streams.streamBusinesses`, `Streams.streamAccounts`, `Streams.streamContacts`, `Streams.streamDocuments`, or `Streams.streamTags`, hydrate rows (`Streams.hydrateAndUnwrap`), write CSV lazily.
+  - `update businesses/accounts/contacts/tags`: read CSV into repo-owned delta records, fetch the current entity (`slug` for businesses, `id` for the rest), normalize against that fresh API state, and PATCH immediately when something changed.
+  - `delete` accounts/contacts/documents/tags: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
   - `map accounts`: align source/target account streams by `number` and output `source_id,target_id,number`.
-  - `create` businesses/accounts/contacts/documents: read create payload rows, optionally rewrite blueprint account IDs for documents, and POST sequentially through the shared command stream machinery.
+  - `create` businesses/accounts/contacts/documents/tags: read create payload rows, optionally rewrite blueprint account IDs for documents, and POST sequentially through the shared command stream machinery.
   - `balance`: POST the ledger report for the period, narrow it to the selected accounts, and write one row per entry (or one per day with `--daily`).
   - `reconcile`: open both sources as daily balances, align them by date, and write one row per day.
 

@@ -10,7 +10,7 @@ Status: **plan only, nothing implemented.**
 This supersedes the inventory in `ROADMAP.md` Phase 5, which predates the Apr 2026 spec
 growth and the rolling-balance work.
 
-**Covered**: businesses, accounts, contacts, documents — full create/list/update/delete —
+**Covered**: businesses, accounts, contacts, documents, tags — full create/list/update/delete —
 plus `map accounts`, and `POST /report/ledger/` via `balance` / `reconcile` (with TITO and
 CSV comparison sources).
 
@@ -21,7 +21,7 @@ CSV comparison sources).
 | reports | 7 of 8: `journal`, `balance-sheet`, `balance-sheet-short`, `income-statement`, `income-statement-short`, `equity-changes`, `vat-report` | same POST pattern as the ledger; all types already generated |
 | periods | `period/` CRUD | `Period`, `PaginatedPeriodList` generated |
 | entries | `document/{id}/entry/` | read-only, N+1 by construction |
-| small entities | `tags/`, `identifiers/`, `headers/`, `vat_period/` | plain CRUD |
+| small entities | `identifiers/`, `headers/`, `vat_period/` | plain CRUD |
 | files | `files/`, `file_upload/`, document `attach_files`/`set_files`/`detach_files` | multipart — the one genuinely new mechanism |
 | document actions | `lock`/`unlock`, `flag`/`unflag`, `copy`, relations, suggestions | POST actions, no CSV shape |
 | invoicing | `invoice/` (+7 actions), `product/`, `purchase_invoice/` | a whole subtree, new in the Apr 2026 spec |

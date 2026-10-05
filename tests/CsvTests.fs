@@ -19,6 +19,9 @@ type JsonRow = { id: int; payload: JsonElement }
 [<CLIMutable>]
 type JsonOptionRow = { id: int; payload: JsonElement option }
 
+[<CLIMutable>]
+type ListRow = { id: int; tag_ids: int list option }
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 let private writeToCsv (fields: string list option) (rows: Row list) : string =
@@ -185,11 +188,50 @@ let ``parseCsvJsonElement: array literal parses as JSON array`` () =
     let kind = e.ValueKind
     test <@ kind = JsonValueKind.Array @>
 
+// ── Lists: one `;`-separated cell ─────────────────────────────────────────────
+
+let private writeListRowsToCsv (rows: ListRow list) : string =
+    use writer = new StringWriter()
+    Csv.writeCsvGeneric<ListRow> writer None (AsyncSeq.ofSeq rows)
+    |> AsyncSeq.toListSynchronously
+    |> ignore
+    writer.ToString()
+
+let private readListRowsFromCsv (csv: string) : ListRow list =
+    use reader = new StringReader(csv)
+    Csv.readCsvGeneric<ListRow> reader None
+    |> AsyncSeq.toListSynchronously
+
+[<Fact>]
+let ``An int list is written as one semicolon-separated cell`` () =
+    let csv = writeListRowsToCsv [ { id = 1; tag_ids = Some [ 1; 2; 3; 4 ] } ]
+    let lines = csv.Split('\n') |> Array.map (fun s -> s.Trim()) |> Array.filter (fun s -> s <> "")
+    test <@ lines = [| "id,tag_ids"; "1,1;2;3;4" |] @>
+
+[<Fact>]
+let ``An int list survives round-trip`` () =
+    let rows = [
+        { id = 1; tag_ids = Some [ 1; 2; 3; 4 ] }
+        { id = 2; tag_ids = Some [ 7 ] }
+        { id = 3; tag_ids = None }
+    ]
+    test <@ readListRowsFromCsv (writeListRowsToCsv rows) = rows @>
+
+[<Fact>]
+let ``A JSON array cell reads as a list`` () =
+    let result = readListRowsFromCsv "id,tag_ids\n1,\"[1,2]\"\n"
+    test <@ result = [ { id = 1; tag_ids = Some [ 1; 2 ] } ] @>
+
 // ── Delta reading: an empty cell clears the field (D11) ───────────────────────
 
 let private readAccountDeltas (fields: string list option) (csv: string) : Nocfo.Domain.AccountDelta list =
     use reader = new StringReader(csv)
     Csv.readDeltas<Nocfo.Domain.AccountDelta, int, NocfoApi.Types.PatchedAccountRequest> "id" reader fields
+    |> AsyncSeq.toListSynchronously
+
+let private readDocumentDeltas (fields: string list option) (csv: string) : Nocfo.Domain.DocumentDelta list =
+    use reader = new StringReader(csv)
+    Csv.readDeltas<Nocfo.Domain.DocumentDelta, int, NocfoApi.Types.PatchedDocumentInstanceRequest> "id" reader fields
     |> AsyncSeq.toListSynchronously
 
 [<Fact>]
@@ -212,3 +254,15 @@ let ``An empty cell in a column that has no empty value is rejected`` () =
             None
         with CsvFormatException message -> Some message
     test <@ message |> Option.map (fun m -> m.Contains "opening_balance") = Some true @>
+
+[<Fact>]
+let ``A semicolon-separated cell sets a list field`` () =
+    let deltas = readDocumentDeltas (Some ["id"; "tag_ids"]) "id,tag_ids\n7,3;5\n"
+    let result = deltas |> List.map (fun d -> d.id, d.patch.tag_ids)
+    test <@ result = [ 7, Some [ 3; 5 ] ] @>
+
+[<Fact>]
+let ``An empty cell in a list column clears the list`` () =
+    let deltas = readDocumentDeltas (Some ["id"; "tag_ids"]) "id,tag_ids\n7,\n"
+    let result = deltas |> List.map (fun d -> d.id, d.patch.tag_ids)
+    test <@ result = [ 7, Some [] ] @>

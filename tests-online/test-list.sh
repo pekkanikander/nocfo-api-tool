@@ -36,10 +36,19 @@ run_list_case \
 
 run_list_case \
   "list documents" \
-  "id,number,date,balance" \
+  "id,number,date,balance,tag_ids" \
   "id,date" \
   "" \
-  list documents -b "${TEST_BUSINESS_SLUG}" --fields "id,number,date,balance" || true
+  list documents -b "${TEST_BUSINESS_SLUG}" --fields "id,number,date,balance,tag_ids" || true
+
+# The test business need not have any tags, so no column is required and an
+# empty list passes.
+run_list_case \
+  "list tags" \
+  "id,name,description,color" \
+  "" \
+  "" \
+  list tags -b "${TEST_BUSINESS_SLUG}" --fields "id,name,description,color" || true
 
 run_list_case \
   "balance ledger" \

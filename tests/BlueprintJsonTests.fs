@@ -16,7 +16,8 @@ let private row (blueprintJson: string option) : DocumentCreatePayload =
       ``type``    = None
       blueprint   =
         blueprintJson
-        |> Option.map (fun s -> JsonDocument.Parse(s).RootElement.Clone()) }
+        |> Option.map (fun s -> JsonDocument.Parse(s).RootElement.Clone())
+      tag_ids     = None }
 
 let private blueprintOf (result: Result<DocumentCreatePayload, DomainError>) : JsonElement option =
     match result with

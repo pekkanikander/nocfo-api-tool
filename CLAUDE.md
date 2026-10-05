@@ -134,10 +134,10 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 
 | verb | entities |
 | --- | --- |
-| `list` | businesses, accounts, contacts, documents |
-| `update` | businesses, accounts, contacts, documents |
-| `delete` | accounts, contacts, documents |
-| `create` | businesses, accounts, contacts, documents |
+| `list` | businesses, accounts, contacts, documents, tags |
+| `update` | businesses, accounts, contacts, documents, tags |
+| `delete` | accounts, contacts, documents, tags |
+| `create` | businesses, accounts, contacts, documents, tags |
 | `map` | accounts (source → target env, keyed on account number) |
 | `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
 | `reconcile` | daily balances of two sources compared day by day |
@@ -186,8 +186,8 @@ F# requires declaration-before-use ordering:
 ## Known Limitations & TODOs (as of August 2026)
 
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
-- API coverage: businesses, accounts, contacts, documents, and the ledger report. Not covered:
-  entries, periods, other reports, VAT, tags, files, invoicing. See `ROADMAP.md` Phase 5.
+- API coverage: businesses, accounts, contacts, documents, tags, and the ledger report. Not covered:
+  entries, periods, other reports, VAT, files, invoicing. See `ROADMAP.md` Phase 5.
 
 ---
 
@@ -215,7 +215,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 114 tests
+dotnet test tests     # 126 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).

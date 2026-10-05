@@ -24,6 +24,7 @@ type EntitiesArgs =
     | [< NoPrefix; SubCommand >]                  Accounts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Contacts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<BusinessScopedArgs>
+    | [< SubCommand; CustomCommandLine("tags") >] BusinessTags of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Businesses of ParseResults<BusinessesArgs>
     interface IArgParserTemplate with
         member this.Usage =
@@ -32,6 +33,7 @@ type EntitiesArgs =
             | Accounts _   -> "Accounts of a business."
             | Contacts _   -> "Contacts of a business."
             | Documents _  -> "Documents of a business."
+            | BusinessTags _ -> "Tags of a business."
             | Businesses _ -> "Businesses."
 
 [<RequireSubcommand>]
@@ -60,6 +62,7 @@ type CreateEntitiesArgs =
     | [< NoPrefix; SubCommand >]                  Accounts  of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Contacts  of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<DocumentCreateArgs>
+    | [< SubCommand; CustomCommandLine("tags") >] BusinessTags of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Businesses of ParseResults<BusinessesArgs>
     interface IArgParserTemplate with
         member this.Usage =
@@ -68,6 +71,7 @@ type CreateEntitiesArgs =
             | Accounts _   -> "Create accounts from CSV input."
             | Contacts _   -> "Create contacts from CSV input."
             | Documents _  -> "Create documents from CSV input."
+            | BusinessTags _ -> "Create tags from CSV input."
             | Businesses _ -> "Create businesses from CSV input."
 
 type BalanceArgs =

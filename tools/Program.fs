@@ -110,7 +110,7 @@ let private getBusinessContext (toolContext: ToolContext) (args: ParseResults<Bu
 /// Writes the requested fields of a list response as CSV, hydrating each row only when the row
 /// type cannot answer the selection on its own. `AccountRow` lacks only `balance` and `is_used`,
 /// so `list accounts --fields "id,number,name,type"` costs ⌈N/100⌉ requests rather than
-/// ⌈N/100⌉ + N. Document and contact rows are already the full form, so they never hydrate.
+/// ⌈N/100⌉ + N. Document, contact and tag rows are already the full form, so they never hydrate.
 let writeEntitiesCsv<'Full, 'Row>
     (output: TextWriter)
     (fields: string list)
@@ -175,6 +175,14 @@ let listContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedAr
         Streams.streamContactRows
         (fun _ row -> async.Return (Ok row))
 
+let listTags (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    listEntitiesForBusiness<TagFull, TagRow>
+        toolContext
+        args
+        fields
+        Streams.streamTagRows
+        (fun _ row -> async.Return (Ok row))
+
 let private foldCommandResults (printOk: 'Result -> unit) (results: AsyncSeq<Result<'Result, DomainError>>) : Async<int> =
     async {
         let! n =
@@ -203,6 +211,12 @@ let foldContactCommandResults =
         | ContactUpdated contact   -> eprintfn "Updated contact %d (%s)" contact.id contact.name
         | ContactDeleted id        -> eprintfn "Deleted contact %d" id
         | ContactCreated contact   -> eprintfn "Created contact %d (%s)" contact.id contact.name)
+
+let foldTagCommandResults =
+    foldCommandResults (function
+        | TagUpdated tag           -> eprintfn "Updated tag %d (%s)" tag.id (defaultArg tag.name "<none>")
+        | TagDeleted id            -> eprintfn "Deleted tag %d" id
+        | TagCreated tag           -> eprintfn "Created tag %d (%s)" tag.id (defaultArg tag.name "<none>"))
 
 let foldBusinessCommandResults =
     foldCommandResults (function
@@ -258,6 +272,23 @@ let updateContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
             return mapDomainErrorToExitCode error
     }
 
+let updateTags (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    async {
+        let input = toolContext.Input
+        let! businessContext  = getBusinessContext toolContext args
+        match businessContext with
+        | Ok ctx ->
+            // The desired state of tags from the CSV file.
+            let csvStream =
+                Nocfo.Csv.readDeltas<TagDelta, int, NocfoApi.Types.PatchedTagRequest> "id" input (Some fields)
+                |> AsyncSeq.map Ok
+            return!
+                Tag.executeDeltaUpdates ctx csvStream
+                |> foldTagCommandResults
+        | Error error ->
+            return mapDomainErrorToExitCode error
+    }
+
 let updateDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
     async {
         let input = toolContext.Input
@@ -302,6 +333,9 @@ let deleteDocuments (toolContext: ToolContext) (args: ParseResults<BusinessScope
 let deleteContacts (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
     deleteEntities toolContext args fields ContactCommand.DeleteContact Streams.executeContactCommands foldContactCommandResults
 
+let deleteTags (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    deleteEntities toolContext args fields TagCommand.DeleteTag Streams.executeTagCommands foldTagCommandResults
+
 // XXX: TODO: Implement an abstract 'command' type and a map of commands to functions.
 let list (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
     async {
@@ -312,6 +346,7 @@ let list (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Accounts args   -> listAccounts toolContext args fields
             | EntitiesArgs.Contacts args   -> listContacts toolContext args fields
             | EntitiesArgs.Documents args  -> listDocuments toolContext args fields
+            | EntitiesArgs.BusinessTags args -> listTags toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
 
@@ -324,6 +359,7 @@ let update  (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Accounts args   -> updateAccounts toolContext args fields
             | EntitiesArgs.Contacts args   -> updateContacts toolContext args fields
             | EntitiesArgs.Documents args  -> updateDocuments toolContext args fields
+            | EntitiesArgs.BusinessTags args -> updateTags toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
 
@@ -335,6 +371,7 @@ let delete (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Accounts args -> deleteAccounts toolContext args fields
             | EntitiesArgs.Contacts args -> deleteContacts toolContext args fields
             | EntitiesArgs.Documents args -> deleteDocuments toolContext args fields
+            | EntitiesArgs.BusinessTags args -> deleteTags toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
 
@@ -481,6 +518,22 @@ let createContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
                 |> foldContactCommandResults
     }
 
+let createTags (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    async {
+        let! businessContext = getBusinessContext toolContext args
+        match businessContext with
+        | Error error ->
+            return mapDomainErrorToExitCode error
+        | Ok ctx ->
+            let commands =
+                Nocfo.Csv.readCsvGeneric<TagCreatePayload> toolContext.Input (Some fields)
+                |> AsyncSeq.map (fun payload -> Ok (TagCommand.CreateTag payload))
+            return!
+                commands
+                |> Streams.executeTagCommands ctx
+                |> foldTagCommandResults
+    }
+
 let createBusinesses (toolContext: ToolContext) (args: ParseResults<BusinessesArgs>) (fields: string list) =
     async {
         let commands =
@@ -532,6 +585,7 @@ let create (toolContext: ToolContext) (args: ParseResults<CreateEntitiesArgs>) =
             | CreateEntitiesArgs.Accounts  accountArgs   -> createAccounts  toolContext accountArgs  fields
             | CreateEntitiesArgs.Contacts  contactArgs   -> createContacts  toolContext contactArgs  fields
             | CreateEntitiesArgs.Documents documentArgs  -> createDocuments toolContext documentArgs fields
+            | CreateEntitiesArgs.BusinessTags tagArgs    -> createTags      toolContext tagArgs      fields
             | CreateEntitiesArgs.Businesses businessArgs -> createBusinesses toolContext businessArgs fields
             | _ -> failwith "Unknown create entity type"
     }

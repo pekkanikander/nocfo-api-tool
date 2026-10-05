@@ -17,6 +17,7 @@ PASS_COUNT=0
 FAIL_COUNT=0
 WORK_DIR=""
 TEST_BUSINESS_SLUG=""
+CREATED_ID=""
 
 setup_online_test_env() {
   WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nocfo-online-tests.XXXXXX")"
@@ -291,7 +292,7 @@ run_list_case() {
     failures="${failures}unexpected CSV header: got '${actual_header}', expected '${expected_header}'"$'\n'
   fi
 
-  if ! message="$(assert_csv_rows_have_values "${stdout_file}" "${required_columns}" 2>&1)"; then
+  if [ -n "${required_columns}" ] && ! message="$(assert_csv_rows_have_values "${stdout_file}" "${required_columns}" 2>&1)"; then
     failures="${failures}${message}"$'\n'
   fi
 
@@ -452,6 +453,138 @@ run_mutate_case() {
     while IFS= read -r line; do
       [ -n "${line}" ] && printf '    - %s\n' "${line}"
     done <<< "${failures}"
+    printf '  artifacts: %s\n' "${WORK_DIR}"
+    return 1
+  fi
+
+  PASS_COUNT=$((PASS_COUNT + 1))
+  printf 'PASS %s\n' "${case_name}"
+  return 0
+}
+
+# Creates one entity from a one-row CSV and finds it again by the value of the
+# row's first column, which must therefore be unique. Sets CREATED_ID.
+run_create_case() {
+  local case_name="$1"
+  local csv_header="$2"
+  local csv_row="$3"
+  shift 3
+  # Remaining args are the entity sub-command and its flags, e.g.:
+  #   tags -b <slug>
+
+  local case_slug
+  case_slug="$(printf '%s' "${case_name}" | tr ' /' '__')"
+
+  local create_csv="${WORK_DIR}/${case_slug}.create.csv"
+  local create_stderr="${WORK_DIR}/${case_slug}.create.stderr"
+  local list_stdout="${WORK_DIR}/${case_slug}.list.stdout"
+  local key_field="${csv_header%%,*}"
+  local key_value="${csv_row%%,*}"
+
+  local -a create_cmd=(
+    dotnet run --project tools --no-build --
+    --profile "${ONLINE_PROFILE_NAME}" --verbose
+    create "$@" --fields "${csv_header}"
+  )
+  local -a list_cmd=(
+    dotnet run --project tools --no-build --
+    --profile "${ONLINE_PROFILE_NAME}" --verbose
+    list "$@" --fields "id,${key_field}"
+  )
+
+  local exit_code found_id
+
+  printf '%s\n%s\n' "${csv_header}" "${csv_row}" > "${create_csv}"
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${create_cmd[@]}" --in "${create_csv}") >/dev/null 2>"${create_stderr}"
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ] || stderr_has_unhandled_exception "${create_stderr}"; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (create step failed with exit code %s)\n' "${case_name}" "${exit_code}"
+    printf '  artifacts: %s\n' "${WORK_DIR}"
+    return 1
+  fi
+
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${list_cmd[@]}") >"${list_stdout}" 2>/dev/null
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ] || ! found_id="$(csv_get_value "${list_stdout}" "${key_field}" "${key_value}" "id" 2>&1)"; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (created %s=%s does not list — tst state may be dirty)\n' "${case_name}" "${key_field}" "${key_value}"
+    printf '  artifacts: %s\n' "${WORK_DIR}"
+    return 1
+  fi
+
+  CREATED_ID="${found_id}"
+  PASS_COUNT=$((PASS_COUNT + 1))
+  printf 'PASS %s\n' "${case_name}"
+  return 0
+}
+
+# Deletes one entity and confirms that it no longer lists.
+run_delete_case() {
+  local case_name="$1"
+  local entity_id="$2"
+  shift 2
+  # Remaining args are the entity sub-command and its flags, e.g.:
+  #   tags -b <slug>
+
+  local case_slug
+  case_slug="$(printf '%s' "${case_name}" | tr ' /' '__')"
+
+  local delete_csv="${WORK_DIR}/${case_slug}.delete.csv"
+  local delete_stderr="${WORK_DIR}/${case_slug}.delete.stderr"
+  local list_stdout="${WORK_DIR}/${case_slug}.list.stdout"
+
+  local -a delete_cmd=(
+    dotnet run --project tools --no-build --
+    --profile "${ONLINE_PROFILE_NAME}" --verbose
+    delete "$@"
+  )
+  local -a list_cmd=(
+    dotnet run --project tools --no-build --
+    --profile "${ONLINE_PROFILE_NAME}" --verbose
+    list "$@" --fields "id"
+  )
+
+  local exit_code
+
+  printf 'id\n%s\n' "${entity_id}" > "${delete_csv}"
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${delete_cmd[@]}" --in "${delete_csv}") >/dev/null 2>"${delete_stderr}"
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ] || stderr_has_unhandled_exception "${delete_stderr}"; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (delete step failed with exit code %s — tst state may be dirty)\n' "${case_name}" "${exit_code}"
+    printf '  artifacts: %s\n' "${WORK_DIR}"
+    return 1
+  fi
+
+  exit_code=0
+  set +e
+  (cd "${REPO_ROOT}"; "${list_cmd[@]}") >"${list_stdout}" 2>/dev/null
+  exit_code=$?
+  set -e
+
+  if [ "${exit_code}" -ne 0 ]; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (list step failed with exit code %s)\n' "${case_name}" "${exit_code}"
+    printf '  artifacts: %s\n' "${WORK_DIR}"
+    return 1
+  fi
+
+  if csv_get_value "${list_stdout}" "id" "${entity_id}" "id" >/dev/null 2>&1; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s (id=%s still lists — tst state is dirty)\n' "${case_name}" "${entity_id}"
     printf '  artifacts: %s\n' "${WORK_DIR}"
     return 1
   fi

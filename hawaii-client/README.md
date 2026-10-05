@@ -76,16 +76,16 @@ against a live NoCFO environment.
 
 - `Http.createHttpContext` normalises the base URL (always `/v1`) and attaches `Authorization: Token <value>` to each request. All HTTP helpers surface a structured `HttpError` DU (`Unauthorized`, `NotFound`, `RateLimited`, `ServerError`, `ClientError`, `ParseError`) and retry automatically on 429/5xx with exponential backoff.
 - `AsyncSeqHelpers.paginateByPageSRTP` expresses “fetch page → yield results → follow `next`” as an `AsyncSeq<Result<'a,_>>`, preserving ordering and letting callers apply back-pressure.
-- `Streams.streamBusinesses` / `streamAccounts` / `streamContacts` / `streamDocuments`
+- `Streams.streamBusinesses` / `streamAccounts` / `streamContacts` / `streamDocuments` / `streamTags`
   wrap generated DTOs in domain types, ensuring we always carry hydration hooks inside
   `Hydratable`.
 - `Domain.Hydratable` plus `Streams.hydrateAndUnwrap` give consumers (CLI + scripts) the choice between lazy partials and eagerly hydrated entities.
 - `PatchShape` computes typed PATCH bodies by comparing desired delta rows with the
   freshly fetched API entity.
-- `Account.executeDeltaUpdates` and `Contact.executeDeltaUpdates` drive update flows
+- `Account.executeDeltaUpdates`, `Contact.executeDeltaUpdates` and `Tag.executeDeltaUpdates` drive update flows
   by fetching the current entity for each CSV `id`, diffing, and PATCHing in CSV order.
-- `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
-  `Streams.executeDocumentCommands` interpret command streams and turn them into HTTP API calls.
+- `Streams.executeAccountCommands`, `Streams.executeContactCommands`,
+  `Streams.executeDocumentCommands`, and `Streams.executeTagCommands` interpret command streams and turn them into HTTP API calls.
 - `Reports.fs` holds the rolling balance (`Balance`), the daily comparison (`Reconcile`) and the sources they read (`BalanceSource`); its folds are pure, so the CLI only supplies the streams.
 - `Tito.fs` reads the Finnish machine-readable bank statement (`.nda`) into records; the layouts are data, verified against the Finanssiala "Konekielinen tiliote" specification v3.3.
 - `Csv.fs` plus `CsvHelper.fs` provide the generic CSV mapping used by both tests and CLI commands.
@@ -98,11 +98,11 @@ Use `Domain-design.md` for the higher-level rationale before touching alignment 
 
 - `Nocfo.Tools.Runtime` builds on `Http.createHttpContext` + `Accounting.ofHttp`.
 - `BusinessResolver.resolve` (from `Domain.fs`) is how the CLI maps free-form IDs to a `BusinessContext`.
-- `Streams.streamBusinesses` / `streamAccounts` / `streamContacts` / `streamDocuments`
+- `Streams.streamBusinesses` / `streamAccounts` / `streamContacts` / `streamDocuments` / `streamTags`
   plus `hydrateAndUnwrap` provide the listing flows.
-- `Account.executeDeltaUpdates` / `Contact.executeDeltaUpdates` implement per-row updates.
-- `Streams.executeAccountCommands`, `Streams.executeContactCommands`, and
-  `Streams.executeDocumentCommands` implement deletes and document creation.
+- `Account.executeDeltaUpdates` / `Contact.executeDeltaUpdates` / `Tag.executeDeltaUpdates` implement per-row updates.
+- `Streams.executeAccountCommands`, `Streams.executeContactCommands`,
+  `Streams.executeDocumentCommands`, and `Streams.executeTagCommands` implement deletes and creation.
 - `Csv.fs` and `Nocfo.CsvHelpers` keep CSV exports/imports deterministic.
 
 If you add or rename domain types, plan to update both this README and `tools/README.md` so users understand which commands are affected.

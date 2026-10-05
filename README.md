@@ -182,9 +182,9 @@ needs no action.
 - Output defaults to stdout and input defaults to stdin;
   `--out`/`--in` override those streams without shell redirection.
 - Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,
-  `update contacts`; `delete accounts`, `delete contacts`, `delete documents`; `create businesses`,
-  `create accounts`, `create contacts`, and minimal `create documents`; plus `map accounts`,
-  `balance`, `reconcile` and `statement`.
+  `update contacts`, `update tags`; `delete accounts`, `delete contacts`, `delete documents`,
+  `delete tags`; `create businesses`, `create accounts`, `create contacts`, `create tags`, and
+  minimal `create documents`; plus `map accounts`, `balance`, `reconcile` and `statement`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,

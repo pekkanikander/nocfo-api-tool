@@ -133,7 +133,8 @@ type DocumentCreatePayload =
     description: string option
     is_draft: bool option
     ``type``: JsonElement option
-    blueprint: JsonElement option }
+    blueprint: JsonElement option
+    tag_ids: int list option }
 
 [<CLIMutable>]
 type DocumentDelta =
@@ -184,6 +185,37 @@ type ContactResult =
   | ContactCreated of ContactFull
   | ContactUpdated of ContactFull
   | ContactDeleted of int
+
+/// ------------------------------------------------------------
+/// Tags
+/// ------------------------------------------------------------
+
+type TagFull  = NocfoApi.Types.Tag
+type TagRow   = NocfoApi.Types.Tag
+
+[<CLIMutable>]
+type TagDelta =
+  { id: int; patch: NocfoApi.Types.PatchedTagRequest }
+  with
+    static member Create (id: int, patch: NocfoApi.Types.PatchedTagRequest) =
+      { id = id; patch = patch }
+
+type Tag      = Hydratable<TagFull, TagRow>
+
+[<CLIMutable>]
+type TagCreatePayload =
+  { name: string
+    description: string option
+    color: string option }
+
+type TagCommand =
+  | CreateTag of TagCreatePayload
+  | DeleteTag of tagId:int
+
+type TagResult =
+  | TagCreated of TagFull
+  | TagUpdated of TagFull
+  | TagDeleted of int
 
 /// ------------------------------------------------------------
 /// Mapping output DTOs
@@ -493,6 +525,26 @@ module Contact =
       Endpoints.contactById ContactUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
 
 ///
+/// Tag module operations
+///
+
+module Tag =
+  let private missingTagError (id: int) =
+    DomainError.Unexpected $"Alignment failure: missing tag for CSV id {id}."
+
+  let ofRaw (raw: TagFull) : Tag =
+    Hydratable.Full raw
+
+  let fetchFull = EntityOps.fetchById Endpoints.tagById missingTagError
+
+  let diffToPatch : TagFull -> TagDelta -> Result<PatchedTagRequest option, DomainError> =
+    EntityOps.diffToPatch "tag" (fun t -> t.id) (fun d -> d.id) (fun d -> d.patch)
+
+  let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<TagDelta, DomainError>>) =
+    EntityOps.executeDeltaUpdates
+      Endpoints.tagById TagUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
+
+///
 /// Streams module operations —— maybe to be folded to the previous modules
 ///
 
@@ -552,6 +604,12 @@ module Streams =
        (fun page -> Endpoints.contactsBySlugPage context.key.slug page)
     |> toDomain id
 
+  let streamTagRows (context: BusinessContext) : AsyncSeq<Result<TagRow, DomainError>> =
+    Streams.streamPaginated<PaginatedTagList, TagFull>
+       context.ctx.http
+       (fun page -> Endpoints.tagsBySlugPage context.key.slug page)
+    |> toDomain id
+
   /// Domain-level stream of accounts for a given business, yielding lazy Partials
   /// that can be hydrated to Full on demand
   let streamAccounts (context: BusinessContext) : AsyncSeq<Result<Account, DomainError>> =
@@ -564,6 +622,10 @@ module Streams =
   /// Domain-level stream of contacts for a given business.
   let streamContacts (context: BusinessContext) : AsyncSeq<Result<Contact, DomainError>> =
     streamContactRows context |> AsyncSeq.map (Result.map Contact.ofRaw)
+
+  /// Domain-level stream of tags for a given business.
+  let streamTags (context: BusinessContext) : AsyncSeq<Result<Tag, DomainError>> =
+    streamTagRows context |> AsyncSeq.map (Result.map Tag.ofRaw)
 
 
   let hydrateAndUnwrap<'Full, 'Partial>
@@ -692,6 +754,32 @@ module Streams =
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.contactById context.key.slug (string id))
             |> AsyncResult.map (fun () -> ContactDeleted id)
+
+    executeCommands context formatDryRun mapToOperation commands
+
+  let executeTagCommands
+    (context: BusinessContext)
+    (commands: AsyncSeq<Result<TagCommand, DomainError>>)
+    : AsyncSeq<Result<TagResult, DomainError>> =
+
+    let formatDryRun = function
+      | TagCommand.CreateTag payload ->
+          sprintf "POST %s %s"
+            (Endpoints.tagsBySlug context.key.slug)
+            (serializeUntyped payload)
+      | TagCommand.DeleteTag id ->
+          sprintf "DELETE %s" (Endpoints.tagById context.key.slug (string id))
+
+    let mapToOperation = function
+      | TagCommand.CreateTag payload ->
+          fun () ->
+            Http.postJson<TagCreatePayload, TagFull>
+              context.ctx.http (Endpoints.tagsBySlug context.key.slug) payload
+            |> AsyncResult.map TagCreated
+      | TagCommand.DeleteTag id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.tagById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> TagDeleted id)
 
     executeCommands context formatDryRun mapToOperation commands
 
