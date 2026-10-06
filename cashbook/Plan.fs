@@ -30,8 +30,8 @@ module Plan =
     let private day (date: DateOnly) = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
 
     /// A book line is posted, as cash, when it was paid from the till: cash-marked, or unmarked and matched to
-    /// nothing (M9, M10). A MobilePay-marked line is a hint only and so is a matched unmarked line, and a
-    /// book-only or ambiguous line waits for `match.csv` to be corrected (M6, M8).
+    /// nothing (M9, M10). A MobilePay-marked line is a hint only, matched or not (M6), and so is an unmarked
+    /// line that matched, even ambiguously (M8, M9).
     let private posted (lineMatch: LineMatch) =
         lineMatch.tier = Tier.Cash && lineMatch.line.method <> PaymentMethod.MobilePay
 
