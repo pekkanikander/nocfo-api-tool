@@ -30,8 +30,8 @@ module Seed =
               $"# name     = {quote account.name}"
               "# keywords = []" ]
 
-    /// A `rules.toml` skeleton for the chart of accounts: the payment and fee accounts blank, every revenue
-    /// and expense account a commented-out rule stub, in account-number order.
+    /// A `rules.toml` skeleton for the chart of accounts: the payment, fee and clearing accounts blank, every
+    /// revenue and expense account a commented-out rule stub, in account-number order.
     let render (accounts: Account list) : string =
         let ofKind kind =
             accounts

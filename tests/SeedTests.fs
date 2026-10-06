@@ -28,13 +28,13 @@ let private uncommentStubs (toml: string) =
     Regex.Replace(toml, @"^# (?=\[\[|account |name |keywords )", "", RegexOptions.Multiline)
 
 [<Fact>]
-let ``Payment and fee accounts are present and blank`` () =
+let ``Payment, fee and clearing accounts are present and blank`` () =
     let accounts = table (Toml.ToModel rendered) "accounts"
     let blanks =
-        [ for key in [ "cash"; "mobilepay"; "fees" ] ->
+        [ for key in [ "cash"; "mobilepay"; "fees"; "unclassified" ] ->
             let account = table accounts key
             string account.["number"], string account.["name"] ]
-    test <@ blanks = List.replicate 3 ("", "") @>
+    test <@ blanks = List.replicate 4 ("", "") @>
 
 [<Fact>]
 let ``Asset and liability accounts are listed as candidates in number order`` () =

@@ -52,9 +52,11 @@ module MatchReport =
         match note with
         | Note.Contradiction       -> "contradiction: MobilePay wins"
         | Note.PossibleMp possible -> "possible-mp: " + Matching.ids possible
+        | Note.OutsideExport
         | Note.AssumedCash
         | Note.UnmarkedExpense     -> Note.reason note
 
+    /// A row; the transactions an ambiguous line contests are listed but not summed (M8).
     let private row (lineMatch: LineMatch) : MatchRow =
         let line = lineMatch.line
         { book_page   = line.page
@@ -64,9 +66,9 @@ module MatchReport =
           book_tapa   = line.tapa
           tier        = Tier.describe lineMatch.tier
           mp_ids      = Matching.ids lineMatch.transactions
-          mp_sum      = match lineMatch.transactions with
-                        | [] -> ""
-                        | transactions -> Report.amount (transactions |> List.sumBy (fun transaction -> transaction.amount))
+          mp_sum      = match lineMatch.tier, lineMatch.transactions with
+                        | Tier.Ambiguous, _ | _, [] -> ""
+                        | _, transactions -> Report.amount (transactions |> List.sumBy (fun transaction -> transaction.amount))
           note        = lineMatch.note |> Option.map note |> Option.defaultValue "" }
 
     /// `match.csv` (R1): one row per book line in file order.
@@ -116,51 +118,47 @@ type PlanRow =
       amount:          string
       lines:           int
       receipts:        int
-      flagged:         int
+      tags:            string
       description:     string }
 
 module PlanReport =
 
+    /// The paper receipts a row brings: a book line's `kuitti` (I3).
+    let private receipts (origin: Origin) =
+        match origin with
+        | Origin.Line line     -> line.receipts
+        | Origin.Transaction _ -> 0
+
     let private row (document: Document) : PlanRow =
         { date            = Report.day document.date
           payment_account = document.payment.number
-          offset_account  = document.offset |> Option.map (fun offset -> offset.number) |> Option.defaultValue ""
+          offset_account  = document.offset.number
           amount          = Report.amount document.amount
-          lines           = document.lines
-          receipts        = document.receipts
-          flagged         = document.flagged
+          lines           = document.rows.Length
+          receipts        = document.rows |> List.sumBy receipts
+          tags            = String.concat "+" document.tags
           description     = document.description }
 
     /// `plan.csv` (P1): one row per document, in the plan's order.
     let render (documents: Document list) : string = Report.render (documents |> List.map row)
 
-/// One row of `review.csv` (R2).
-type ReviewRow =
-    { source: string
-      ref:    string
-      date:   string
-      amount: string
-      text:   string
-      reason: string }
+/// The lines of the run's summary on stderr (R4).
+module Summary =
 
-module ReviewReport =
+    /// A book line named by page, date and amount.
+    let private line (line: CashBookLine) = $"page {line.page}, {Report.day line.date}, {Report.amount line.amount}"
 
-    let private row (review: Review) : ReviewRow =
-        match review.origin with
-        | Origin.Line line ->
-            { source = "book"
-              ref    = $"L{line.file_line}"
-              date   = Report.day line.date
-              amount = Report.amount line.amount
-              text   = line.text
-              reason = review.reason }
-        | Origin.Transaction transaction ->
-            { source = "mp"
-              ref    = transaction.id
-              date   = Report.day transaction.date
-              amount = Report.amount transaction.amount
-              text   = transaction.text
-              reason = review.reason }
+    /// One line per tag with the number of documents carrying it, alphabetically (P7).
+    let ofDocuments (documents: Document list) : string list =
+        [ for tag, count in documents |> List.collect (fun document -> document.tags) |> List.countBy id |> List.sort ->
+              $"documents tagged {tag}: {count}" ]
 
-    /// `review.csv` (R2): one row per item and reason, in the plan's order.
-    let render (reviews: Review list) : string = Report.render (reviews |> List.map row)
+    /// One line per book line the export should have covered (M6) and per cash line MobilePay may have paid
+    /// after all (M7), in file order.
+    let ofMatches (matches: Matches) : string list =
+        [ for lineMatch in matches.lines do
+              match lineMatch.tier, lineMatch.note with
+              | Tier.BookOnly, Some Note.OutsideExport -> ()
+              | Tier.BookOnly, _ -> $"book-only: {line lineMatch.line}"
+              | _, Some (Note.PossibleMp possible) -> $"possible-mp: {line lineMatch.line} (MobilePay {Matching.ids possible})"
+              | _ -> () ]

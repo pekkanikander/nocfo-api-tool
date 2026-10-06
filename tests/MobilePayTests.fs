@@ -22,8 +22,8 @@ let private transactions (rows: string) =
 [<Fact>]
 let ``A transaction is read with its date and time split, the amount signed and the kind by Maksutapa`` () =
     test <@ transactions "18/07/2026 19:12,Palvelumaksu,,,,-2,EUR,Palvelumaksu,f-1001\n"
-              = [ { id = "f-1001"; date = DateOnly(2026, 7, 18); time = TimeOnly(19, 12); text = ""; amount = -2M
-                    kind = TransactionKind.Fee } ] @>
+              = [ { id = "f-1001"; date = DateOnly(2026, 7, 18); time = TimeOnly(19, 12); name = "Palvelumaksu"; text = ""
+                    amount = -2M; kind = TransactionKind.Fee } ] @>
 
 [<Fact>]
 let ``A quoted Viesti may contain a comma`` () =

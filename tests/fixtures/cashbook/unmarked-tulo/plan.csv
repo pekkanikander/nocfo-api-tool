@@ -1,9 +1,9 @@
-date;payment_account;offset_account;amount;lines;receipts;flagged;description
-2026-09-08;1900;4000;-13,00;1;2;0;[kassakirja] Kassa/Alkufest kulut 2026-09-08 Alkufest (2 kuittia)
-2026-09-10;1900;4000;-93,43;1;0;0;[kassakirja] Kassa/Alkufest kulut 2026-09-10 Alkufest (0 kuittia)
-2026-09-11;1900;3000;3,00;1;0;0;[kassakirja] Kassa/Kahvila 2026-09-11 (1)
-2026-09-11;1900;3060;10,00;1;0;0;[kassakirja] Kassa/Pääsymaksut 2026-09-11 (1)
-2026-09-11;1930;3000;33,00;3;0;0;[kassakirja] MobilePay/Kahvila 2026-09-11 (3)
-2026-09-11;1930;3040;1,00;1;0;0;[kassakirja] MobilePay/Lahjoitukset 2026-09-11 (1)
-2026-09-11;1930;3060;10,00;1;0;0;[kassakirja] MobilePay/Pääsymaksut 2026-09-11 (1)
-2026-09-11;1930;8100;-2,00;1;0;0;[kassakirja] MobilePay/Palvelumaksut 2026-09-11 (1)
+date;payment_account;offset_account;amount;lines;receipts;tags;description
+2026-09-08;1900;4000;-13,00;1;2;;[kassakirja] Kassa/Alkufest kulut 2026-09-08 Alkufest (2 kuittia)
+2026-09-10;1900;4000;-93,43;1;0;unmarked-expense;[kassakirja] Kassa/Alkufest kulut 2026-09-10 Alkufest (0 kuittia)
+2026-09-11;1900;3000;3,00;1;0;;[kassakirja] Kassa/Kahvila 2026-09-11 (1)
+2026-09-11;1900;3060;10,00;1;0;;[kassakirja] Kassa/Pääsymaksut 2026-09-11 (1)
+2026-09-11;1930;3000;33,00;3;0;;[kassakirja] MobilePay/Kahvila 2026-09-11 (3)
+2026-09-11;1930;3040;1,00;1;0;;[kassakirja] MobilePay/Lahjoitukset 2026-09-11 (1)
+2026-09-11;1930;3060;10,00;1;0;;[kassakirja] MobilePay/Pääsymaksut 2026-09-11 (1)
+2026-09-11;1930;8100;-2,00;1;0;;[kassakirja] MobilePay/Palvelumaksut 2026-09-11 (1)

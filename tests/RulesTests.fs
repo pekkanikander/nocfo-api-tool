@@ -23,8 +23,9 @@ let private rules = parsed fixture
 // ── Parsing ───────────────────────────────────────────────────────────────────
 
 [<Fact>]
-let ``Payment and fee accounts are read as number and name`` () =
+let ``Payment, fee and clearing accounts are read as number and name`` () =
     test <@ rules.accounts.mobilepay = { number = "1930"; name = "MobilePay" } @>
+    test <@ rules.accounts.unclassified = { number = "1990"; name = "Selvittelytili" } @>
 
 [<Fact>]
 let ``Amounts and weights are decimal whether the file writes them as integers or floats`` () =
@@ -114,6 +115,7 @@ let private account number name kind : Account = { number = number; name = name;
 let private chart =
     [ account "1900" "Kassa"          AccountKind.Balance
       account "1930" "MobilePay"      AccountKind.Balance
+      account "1990" "Selvittelytili" AccountKind.Balance
       account "8100" "Palvelumaksut"  AccountKind.Expense
       account "3000" "Kahvila"        AccountKind.Income
       account "3010" "Tanssit"        AccountKind.Income

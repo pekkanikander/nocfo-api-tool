@@ -30,16 +30,17 @@ let private fixture (case: string) =
 [<InlineData("exact-multi")>]
 [<InlineData("unmarked-tulo")>]
 [<InlineData("cross-day-near-miss")>]
-let ``A fixture's plan.csv and review.csv are reproduced exactly`` (case: string) =
+[<InlineData("ambiguous-tie")>]
+let ``A fixture's plan.csv is reproduced exactly`` (case: string) =
     let read, lines, transactions = fixture case
-    let plan = Plan.build rules (Matching.run rules lines transactions)
-    test <@ PlanReport.render plan.documents = read "plan.csv" @>
-    test <@ ReviewReport.render plan.reviews = read "review.csv" @>
+    let rendered = PlanReport.render (Plan.build rules (Matching.run rules lines transactions))
+    test <@ rendered = read "plan.csv" @>
 
 [<Theory>]
 [<InlineData("exact-multi")>]
 [<InlineData("unmarked-tulo")>]
 [<InlineData("cross-day-near-miss")>]
+[<InlineData("ambiguous-tie")>]
 let ``A fixture's match.csv read back gives the matches that wrote it`` (case: string) =
     let read, lines, transactions = fixture case
     test <@ MatchReport.read lines transactions (read "match.csv") = Ok (Matching.run rules lines transactions) @>
@@ -55,117 +56,122 @@ let private line (method: PaymentMethod) (text: string) (amount: decimal) : Cash
 let private book (lines: CashBookLine list) = lines |> List.mapi (fun index line -> { line with file_line = index + 2 })
 
 let private transaction (kind: TransactionKind) (id: string) (time: string) (text: string) (amount: decimal) : Transaction =
-    { id = id; date = day; time = TimeOnly.Parse time; text = text; amount = amount; kind = kind }
+    { id = id; date = day; time = TimeOnly.Parse time; name = ""; text = text; amount = amount; kind = kind }
 
 let private payment = transaction TransactionKind.PaymentIn
 
 let private rows (text: string) = text.Split('\n', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray |> List.tail
 
-/// The rows of `plan.csv` and of `review.csv`, headers dropped.
+/// The rows of `plan.csv`, header dropped.
 let private planned (lines: CashBookLine list) (transactions: Transaction list) =
-    let plan = Plan.build rules (Matching.run rules (book lines) transactions)
-    rows (PlanReport.render plan.documents), rows (ReviewReport.render plan.reviews)
+    rows (PlanReport.render (Plan.build rules (Matching.run rules (book lines) transactions)))
 
 [<Fact>]
-let ``A cash-marked line and an unmarked line matched to nothing are posted as cash, a MobilePay-marked one is not (M6, M9, M10)`` () =
-    let documents, reviews =
+let ``A cash-marked line and an unmarked line matched to nothing are posted as cash, the unmarked one tagged; a MobilePay-marked one is not posted (M6, M9, M10)`` () =
+    let documents =
         planned [ line PaymentMethod.Cash "Tanssit" 10M; line PaymentMethod.Unmarked "Tanssit" 5M
                   line PaymentMethod.Unmarked "Alkufest" -2M; line PaymentMethod.MobilePay "Tanssit" 1M ] []
-    test <@ documents = [ "2026-07-18;1900;3010;15,00;2;0;0;[kassakirja] Kassa/Tanssit 2026-07-18 (2)"
-                          "2026-07-18;1900;4000;-2,00;1;0;0;[kassakirja] Kassa/Alkufest kulut 2026-07-18 Alkufest (0 kuittia)" ] @>
-    test <@ reviews = [ "book;L3;2026-07-18;5,00;Tanssit;assumed-cash"
-                        "book;L4;2026-07-18;-2,00;Alkufest;unmarked-expense"
-                        "book;L5;2026-07-18;1,00;Tanssit;book-only" ] @>
+    test <@ documents = [ "2026-07-18;1900;3010;10,00;1;0;;[kassakirja] Kassa/Tanssit 2026-07-18 (1)"
+                          "2026-07-18;1900;3010;5,00;1;0;assumed-cash;[kassakirja] Kassa/Tanssit 2026-07-18 (1)"
+                          "2026-07-18;1900;4000;-2,00;1;0;unmarked-expense;[kassakirja] Kassa/Alkufest kulut 2026-07-18 Alkufest (0 kuittia)" ] @>
 
 [<Fact>]
 let ``A matched line is not posted; its transaction is, from the MobilePay account, its keywords sought in its Viesti and the line's mita (K3)`` () =
-    let documents, reviews =
+    let documents =
         planned [ line PaymentMethod.MobilePay "Tanssit" 10M; line PaymentMethod.Unmarked "" 7M ]
                 [ payment "1" "16:00" "" 10M; payment "2" "16:10" "Tanssit🌱" 7M ]
-    test <@ documents = [ "2026-07-18;1930;3010;17,00;2;0;0;[kassakirja] MobilePay/Tanssit 2026-07-18 (2)" ] @>
-    test <@ reviews = [] @>
+    test <@ documents = [ "2026-07-18;1930;3010;17,00;2;0;;[kassakirja] MobilePay/Tanssit 2026-07-18 (2)" ] @>
 
 [<Fact>]
-let ``An unclassified item is one document of its own with ? for the offset account, and is reviewed (K7)`` () =
-    let documents, reviews =
+let ``An unclassified item is one document of its own on the clearing account, tagged, with ? for the offset name (K7)`` () =
+    let documents =
         planned [ line PaymentMethod.Cash "Zzz" 5M; line PaymentMethod.Cash "Zzz" 5M ] [ payment "1" "16:00" "Yyy" 2M ]
-    test <@ documents = [ "2026-07-18;1900;;5,00;1;0;0;[kassakirja] Kassa/? 2026-07-18 (1)"
-                          "2026-07-18;1900;;5,00;1;0;0;[kassakirja] Kassa/? 2026-07-18 (1)"
-                          "2026-07-18;1930;;2,00;1;0;0;[kassakirja] MobilePay/? 2026-07-18 (1)" ] @>
-    test <@ reviews = [ "book;L2;2026-07-18;5,00;Zzz;unclassified"; "book;L3;2026-07-18;5,00;Zzz;unclassified"
-                        "mp;1;2026-07-18;2,00;Yyy;unclassified" ] @>
+    test <@ documents = [ "2026-07-18;1900;1990;5,00;1;0;unclassified;[kassakirja] Kassa/? 2026-07-18 (1)"
+                          "2026-07-18;1900;1990;5,00;1;0;unclassified;[kassakirja] Kassa/? 2026-07-18 (1)"
+                          "2026-07-18;1930;1990;2,00;1;0;unclassified;[kassakirja] MobilePay/? 2026-07-18 (1)" ] @>
 
 [<Fact>]
 let ``A fee is posted from MobilePay to the fee account whatever its text, under the fees block (K8, C3)`` () =
     let fee (id: string) (text: string) = transaction TransactionKind.Fee id "23:59" text -0.50M
-    let documents, reviews = planned [] [ fee "f-1" "Kahvila"; { fee "f-2" "" with date = day.AddDays 7 } ]
-    test <@ documents = [ "2026-07-25;1930;8100;-1,00;2;0;0;[kassakirja] MobilePay/Palvelumaksut 2026-07-18–2026-07-25 (2)" ] @>
-    test <@ reviews = [] @>
+    let documents = planned [] [ fee "f-1" "Kahvila"; { fee "f-2" "" with date = day.AddDays 7 } ]
+    test <@ documents = [ "2026-07-25;1930;8100;-1,00;2;0;;[kassakirja] MobilePay/Palvelumaksut 2026-07-18–2026-07-25 (2)" ] @>
 
 [<Fact>]
-let ``A payout is neither posted nor reviewed; a transaction of unknown type is reviewed only (I6)`` () =
-    let documents, reviews =
+let ``A payout is not posted; a transaction of unknown type is, on the clearing account, tagged unknown-type (I6)`` () =
+    let documents =
         planned [] [ transaction TransactionKind.Payout "p-1" "06:00" "" -100M
                      transaction TransactionKind.Unknown "u-1" "16:00" "Tanssit" 3M ]
-    test <@ documents = [] @>
-    test <@ reviews = [ "mp;u-1;2026-07-18;3,00;Tanssit;unknown-type" ] @>
+    test <@ documents = [ "2026-07-18;1930;1990;3,00;1;0;unknown-type;[kassakirja] MobilePay/? 2026-07-18 (1)" ] @>
 
 [<Fact>]
-let ``A MobilePay expense no line books is posted all the same, and reviewed (M11)`` () =
+let ``A MobilePay expense no line books is posted all the same, tagged, apart from the one the line books (M11, C1)`` () =
     let expense (id: string) (time: string) = transaction TransactionKind.Expense id time "Alkufest" -13M
-    let documents, reviews = planned [ line PaymentMethod.MobilePay "Alkufest" -13M ] [ expense "e-1" "16:00"; expense "e-2" "17:00" ]
-    test <@ documents = [ "2026-07-18;1930;4000;-26,00;2;0;0;[kassakirja] MobilePay/Alkufest kulut 2026-07-18 (2)" ] @>
-    test <@ reviews = [ "mp;e-2;2026-07-18;-13,00;Alkufest;mp-expense-unbooked" ] @>
+    let documents = planned [ line PaymentMethod.MobilePay "Alkufest" -13M ] [ expense "e-1" "16:00"; expense "e-2" "17:00" ]
+    test <@ documents = [ "2026-07-18;1930;4000;-13,00;1;0;;[kassakirja] MobilePay/Alkufest kulut 2026-07-18 (1)"
+                          "2026-07-18;1930;4000;-13,00;1;0;mp-expense-unbooked;[kassakirja] MobilePay/Alkufest kulut 2026-07-18 (1)" ] @>
 
 [<Fact>]
-let ``An item a flag rule classifies is posted, counted flagged and reviewed (K1)`` () =
-    let documents, reviews = planned [ for text in [ "Kahvila"; "Kahvila"; "Kahvila"; "" ] -> line PaymentMethod.Cash text 2M ] []
-    test <@ documents = [ "2026-07-18;1900;3000;8,00;4;0;1;[kassakirja] Kassa/Kahvila 2026-07-18 (4)" ] @>
-    test <@ reviews = [ "book;L5;2026-07-18;2,00;;flagged" ] @>
+let ``An item a flag rule classifies is posted on a document of its own, tagged flagged (K1, C1)`` () =
+    let documents = planned [ for text in [ "Kahvila"; "Kahvila"; "Kahvila"; "" ] -> line PaymentMethod.Cash text 2M ] []
+    test <@ documents = [ "2026-07-18;1900;3000;6,00;3;0;;[kassakirja] Kassa/Kahvila 2026-07-18 (3)"
+                          "2026-07-18;1900;3000;2,00;1;0;flagged;[kassakirja] Kassa/Kahvila 2026-07-18 (1)" ] @>
+
+[<Fact>]
+let ``The transactions an ambiguous line contests post on their own, without its hint, tagged ambiguous (M8, M9)`` () =
+    let documents =
+        planned [ line PaymentMethod.MobilePay "Tanssit" 10M ]
+                [ payment "1" "16:00" "" 4M; payment "2" "16:10" "" 6M; payment "3" "16:20" "" 3M; payment "4" "16:30" "" 7M ]
+    let expected =
+        [ for amount in [ "4,00"; "6,00"; "3,00"; "7,00" ] ->
+              $"2026-07-18;1930;1990;{amount};1;0;ambiguous+unclassified;[kassakirja] MobilePay/? 2026-07-18 (1)" ]
+    test <@ documents = expected @>
 
 [<Fact>]
 let ``A run holds at most max_days days with postings and is dated its last day (C2)`` () =
-    let documents, _ = planned [ for offset in 0 .. 3 -> { line PaymentMethod.Cash "Tanssit" 10M with date = day.AddDays offset } ] []
-    test <@ documents = [ "2026-07-20;1900;3010;30,00;3;0;0;[kassakirja] Kassa/Tanssit 2026-07-18–2026-07-20 (3)"
-                          "2026-07-21;1900;3010;10,00;1;0;0;[kassakirja] Kassa/Tanssit 2026-07-21 (1)" ] @>
+    let documents = planned [ for offset in 0 .. 3 -> { line PaymentMethod.Cash "Tanssit" 10M with date = day.AddDays offset } ] []
+    test <@ documents = [ "2026-07-20;1900;3010;30,00;3;0;;[kassakirja] Kassa/Tanssit 2026-07-18–2026-07-20 (3)"
+                          "2026-07-21;1900;3010;10,00;1;0;;[kassakirja] Kassa/Tanssit 2026-07-21 (1)" ] @>
 
 [<Fact>]
 let ``A day joins a run only when its gap to the run's last day is at most max_gap (C2)`` () =
-    let documents, _ = planned [ for offset in [ 0; 1; 3 ] -> { line PaymentMethod.Cash "Tanssit" 10M with date = day.AddDays offset } ] []
-    test <@ documents = [ "2026-07-19;1900;3010;20,00;2;0;0;[kassakirja] Kassa/Tanssit 2026-07-18–2026-07-19 (2)"
-                          "2026-07-21;1900;3010;10,00;1;0;0;[kassakirja] Kassa/Tanssit 2026-07-21 (1)" ] @>
+    let documents = planned [ for offset in [ 0; 1; 3 ] -> { line PaymentMethod.Cash "Tanssit" 10M with date = day.AddDays offset } ] []
+    test <@ documents = [ "2026-07-19;1900;3010;20,00;2;0;;[kassakirja] Kassa/Tanssit 2026-07-18–2026-07-19 (2)"
+                          "2026-07-21;1900;3010;10,00;1;0;;[kassakirja] Kassa/Tanssit 2026-07-21 (1)" ] @>
 
 [<Fact>]
 let ``MobilePay postings coalesce under the mobilepay block (C3)`` () =
-    let documents, _ =
+    let documents =
         planned [] [ for offset in 0 .. 4 -> { payment $"{offset}" "16:00" "Tanssit🌱" 10M with date = day.AddDays offset } ]
-    test <@ documents = [ "2026-07-21;1930;3010;40,00;4;0;0;[kassakirja] MobilePay/Tanssit 2026-07-18–2026-07-21 (4)"
-                          "2026-07-22;1930;3010;10,00;1;0;0;[kassakirja] MobilePay/Tanssit 2026-07-22 (1)" ] @>
+    test <@ documents = [ "2026-07-21;1930;3010;40,00;4;0;;[kassakirja] MobilePay/Tanssit 2026-07-18–2026-07-21 (4)"
+                          "2026-07-22;1930;3010;10,00;1;0;;[kassakirja] MobilePay/Tanssit 2026-07-22 (1)" ] @>
 
 [<Fact>]
 let ``A till expense is one document per line, described by its mita and receipts (C4, C5)`` () =
     let expense (receipts: int) = { line PaymentMethod.Cash "Alkufest" -5M with receipts = receipts }
-    let documents, _ = planned [ expense 1; expense 2 ] []
-    test <@ documents = [ "2026-07-18;1900;4000;-5,00;1;1;0;[kassakirja] Kassa/Alkufest kulut 2026-07-18 Alkufest (1 kuittia)"
-                          "2026-07-18;1900;4000;-5,00;1;2;0;[kassakirja] Kassa/Alkufest kulut 2026-07-18 Alkufest (2 kuittia)" ] @>
+    let documents = planned [ expense 1; expense 2 ] []
+    test <@ documents = [ "2026-07-18;1900;4000;-5,00;1;1;;[kassakirja] Kassa/Alkufest kulut 2026-07-18 Alkufest (1 kuittia)"
+                          "2026-07-18;1900;4000;-5,00;1;2;;[kassakirja] Kassa/Alkufest kulut 2026-07-18 Alkufest (2 kuittia)" ] @>
 
 [<Fact>]
-let ``Documents are sorted by date, payment account and offset account, an empty offset first (P1)`` () =
-    let documents, _ =
+let ``Documents are sorted by date, payment account and offset account (P1)`` () =
+    let documents =
         planned [ { line PaymentMethod.Cash "Tanssit" 10M with date = day.AddDays 1 }; line PaymentMethod.Cash "Kahvila" 2M
                   line PaymentMethod.Cash "Zzz" 1M ]
                 [ payment "1" "16:00" "Kahvi" 3M ]
-    test <@ documents = [ "2026-07-18;1900;;1,00;1;0;0;[kassakirja] Kassa/? 2026-07-18 (1)"
-                          "2026-07-18;1900;3000;2,00;1;0;0;[kassakirja] Kassa/Kahvila 2026-07-18 (1)"
-                          "2026-07-18;1930;3000;3,00;1;0;0;[kassakirja] MobilePay/Kahvila 2026-07-18 (1)"
-                          "2026-07-19;1900;3010;10,00;1;0;0;[kassakirja] Kassa/Tanssit 2026-07-19 (1)" ] @>
+    test <@ documents = [ "2026-07-18;1900;1990;1,00;1;0;unclassified;[kassakirja] Kassa/? 2026-07-18 (1)"
+                          "2026-07-18;1900;3000;2,00;1;0;;[kassakirja] Kassa/Kahvila 2026-07-18 (1)"
+                          "2026-07-18;1930;3000;3,00;1;0;;[kassakirja] MobilePay/Kahvila 2026-07-18 (1)"
+                          "2026-07-19;1900;3010;10,00;1;0;;[kassakirja] Kassa/Tanssit 2026-07-19 (1)" ] @>
+
+// ── Summary ───────────────────────────────────────────────────────────────────
 
 [<Fact>]
-let ``Review rows are the book lines in file order, then the transactions by time, matching's reasons before the plan's (R2)`` () =
-    let unknown (id: string) (time: string) = transaction TransactionKind.Unknown id time "" 1M
-    let _, reviews = planned [ line PaymentMethod.Unmarked "Zzz" 5M ] [ unknown "u-2" "17:00"; unknown "u-1" "16:00" ]
-    test <@ reviews = [ "book;L2;2026-07-18;5,00;Zzz;assumed-cash"; "book;L2;2026-07-18;5,00;Zzz;unclassified"
-                        "mp;u-1;2026-07-18;1,00;;unknown-type"; "mp;u-2;2026-07-18;1,00;;unknown-type" ] @>
+let ``The summary counts the documents per tag and names the book-only and possible-mp lines (R4)`` () =
+    let lines =
+        book [ line PaymentMethod.Cash "Tanssit" 10M; line PaymentMethod.MobilePay "Tanssit" 1M; line PaymentMethod.Unmarked "Zzz" 5M ]
+    let matches = Matching.run rules lines [ payment "1" "16:00" "" 10M ]
+    test <@ Summary.ofDocuments (Plan.build rules matches) = [ "documents tagged assumed-cash: 1"; "documents tagged unclassified: 2" ] @>
+    test <@ Summary.ofMatches matches = [ "possible-mp: page 1, 2026-07-18, 10,00 (MobilePay 1)"; "book-only: page 1, 2026-07-18, 1,00" ] @>
 
 // ── match.csv read back ───────────────────────────────────────────────────────
 

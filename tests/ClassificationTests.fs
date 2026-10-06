@@ -23,12 +23,12 @@ let private line (text: string) (amount: decimal) : Item =
     let line : CashBookLine =
         { file_line = 0; page = "1"; date = day; text = text; amount = amount; method = PaymentMethod.Cash
           tapa = "KÄT"; receipts = 0; remark = "" }
-    { origin = Origin.Line line; date = day; amount = amount; text = text }
+    { origin = Origin.Line line; date = day; amount = amount; text = text; tags = [] }
 
 let private payment (id: string) (text: string) (amount: decimal) : Item =
     let transaction : Transaction =
-        { id = id; date = day; time = TimeOnly(16, 0); text = text; amount = amount; kind = TransactionKind.PaymentIn }
-    { origin = Origin.Transaction transaction; date = day; amount = amount; text = text }
+        { id = id; date = day; time = TimeOnly(16, 0); name = ""; text = text; amount = amount; kind = TransactionKind.PaymentIn }
+    { origin = Origin.Transaction transaction; date = day; amount = amount; text = text; tags = [] }
 
 let private onDay (offset: int) (item: Item) = { item with date = day.AddDays offset }
 

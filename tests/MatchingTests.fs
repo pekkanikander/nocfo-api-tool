@@ -24,6 +24,7 @@ let private unwrap (result: Result<'T, string list>) =
 [<InlineData("exact-multi")>]
 [<InlineData("unmarked-tulo")>]
 [<InlineData("cross-day-near-miss")>]
+[<InlineData("ambiguous-tie")>]
 let ``A fixture's match.csv is reproduced exactly`` (case: string) =
     let read name = File.ReadAllText(Path.Combine(fixtures, case, name))
     let lines = unwrap (CashBook.read (read "kassakirja.csv"))
@@ -42,7 +43,7 @@ let private line (method: PaymentMethod) (text: string) (amount: decimal) : Cash
 let private book (lines: CashBookLine list) = lines |> List.mapi (fun index line -> { line with file_line = index + 2 })
 
 let private payment (id: string) (time: string) (text: string) (amount: decimal) : Transaction =
-    { id = id; date = day; time = TimeOnly.Parse time; text = text; amount = amount; kind = TransactionKind.PaymentIn }
+    { id = id; date = day; time = TimeOnly.Parse time; name = ""; text = text; amount = amount; kind = TransactionKind.PaymentIn }
 
 let private outcome (lines: CashBookLine list) (transactions: Transaction list) =
     let matches = Matching.run rules (book lines) transactions
@@ -61,22 +62,25 @@ let ``Of two equal same-day payments the one whose Viesti shares a word with mit
     test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [ later; earlier ] = [ Tier.M2, "1", None ] @>
 
 [<Fact>]
-let ``Two same-day exact subsets of the same cost leave the line ambiguous and its candidates unmatched (M8)`` () =
+let ``Two same-day exact subsets of the same cost leave the line ambiguous, listing their transactions, which stay unmatched (M8)`` () =
     let transactions =
         [ payment "1" "16:00" "" 4M; payment "2" "16:10" "" 6M
           payment "3" "16:20" "" 3M; payment "4" "16:30" "" 7M ]
     let matches = Matching.run rules (book [ line PaymentMethod.MobilePay "Tanssit" 10M ]) transactions
     test <@ matches.lines |> List.map (fun lineMatch -> lineMatch.tier, lineMatch.transactions)
-              = [ Tier.Ambiguous, [] ] @>
+              = [ Tier.Ambiguous, transactions ] @>
     test <@ matches.unmatched = transactions @>
 
 [<Fact>]
-let ``A MobilePay-marked line with no match is book-only, and the transactions stay unmatched (M6)`` () =
+let ``A MobilePay-marked line with no match is book-only, noted outside-export when the export does not reach its date (M6)`` () =
     let fee = { payment "f-1" "16:00" "" -2M with kind = TransactionKind.Fee }
     let other = payment "1" "16:00" "" 7M
-    let matches = Matching.run rules (book [ line PaymentMethod.MobilePay "Tanssit" 10M ]) [ fee; other ]
-    test <@ matches.lines |> List.map (fun lineMatch -> lineMatch.tier, lineMatch.note) = [ Tier.BookOnly, None ] @>
+    let lines = book [ line PaymentMethod.MobilePay "Tanssit" 10M; { line PaymentMethod.MobilePay "Tanssit" 10M with date = day.AddDays 5 } ]
+    let matches = Matching.run rules lines [ fee; other ]
+    test <@ matches.lines |> List.map (fun lineMatch -> lineMatch.tier, lineMatch.note)
+              = [ Tier.BookOnly, None; Tier.BookOnly, Some Note.OutsideExport ] @>
     test <@ matches.unmatched = [ fee; other ] @>
+    test <@ outcome [ line PaymentMethod.MobilePay "Tanssit" 10M ] [] = [ Tier.BookOnly, "", Some Note.OutsideExport ] @>
 
 [<Fact>]
 let ``An unmarked income line with no match is assumed cash (M9)`` () =

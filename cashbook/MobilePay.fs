@@ -14,11 +14,12 @@ type TransactionKind =
     | Unknown
 
 /// One transaction of the MobilePay Box export (I4–I6), signed as exported: fees and expenses negative.
-/// The text is its `Viesti`; the payer's name is not read (I8).
+/// The text is its `Viesti`, the name its `Nimi` (I8).
 type Transaction =
     { id:     string
       date:   DateOnly
       time:   TimeOnly
+      name:   string
       text:   string
       amount: decimal
       kind:   TransactionKind }
@@ -54,6 +55,7 @@ module MobilePay =
         { id     = row.String "Tapahtumatunnus"
           date   = DateOnly.FromDateTime stamp
           time   = TimeOnly.FromDateTime stamp
+          name   = row.String "Nimi"
           text   = row.String "Viesti"
           amount = row.Parse("Summa", "an amount (decimal point)", asAmount, 0M)
           kind   = kindOf kinds (row.String "Maksutapa") }

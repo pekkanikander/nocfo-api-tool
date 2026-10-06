@@ -5,6 +5,7 @@
 cash           = { number = "1900", name = "Kassa" }
 mobilepay      = { number = "1930", name = "MobilePay" }
 fees           = { number = "8100", name = "Palvelumaksut" }
+unclassified   = { number = "1990", name = "Selvittelytili" }
 
 [mobilepay]
 # Maksutapa values, by meaning (I6). Expense and payout values are still unknown.
@@ -82,7 +83,7 @@ account  = "3090"
 name     = "Alkufest tuotot"
 keywords = ["alkufest"]
 
-# K6: a small unmarked MobilePay payment on a day the cafe is already busy, flagged for review.
+# K6: a small unmarked MobilePay payment on a day the cafe is already busy, flagged.
 [[classification.income]]
 account     = "3000"
 name        = "Kahvila"

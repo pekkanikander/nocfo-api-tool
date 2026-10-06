@@ -870,7 +870,9 @@ let cashbookMatch (output: TextWriter) (args: ParseResults<CashbookMatchArgs>) =
         | Error error -> return mapDomainErrorToExitCode error
         | Ok (rules, lines, transactions) ->
 
-        output.Write (Nocfo.Cashbook.MatchReport.render (Nocfo.Cashbook.Matching.run rules lines transactions))
+        let matches = Nocfo.Cashbook.Matching.run rules lines transactions
+        output.Write (Nocfo.Cashbook.MatchReport.render matches)
+        for line in Nocfo.Cashbook.Summary.ofMatches matches do eprintfn "%s" line
         return ExitCodes.EX_OK
     }
 
@@ -890,10 +892,10 @@ let cashbookPlan (output: TextWriter) (args: ParseResults<CashbookPlanArgs>) =
         | Error error -> return mapDomainErrorToExitCode error
         | Ok matches ->
 
-        let plan = Nocfo.Cashbook.Plan.build rules matches
-        output.Write (Nocfo.Cashbook.PlanReport.render plan.documents)
-        args.TryGetResult CashbookPlanArgs.Review
-        |> Option.iter (fun path -> File.WriteAllText(path, Nocfo.Cashbook.ReviewReport.render plan.reviews))
+        let documents = Nocfo.Cashbook.Plan.build rules matches
+        output.Write (Nocfo.Cashbook.PlanReport.render documents)
+        for line in Nocfo.Cashbook.Summary.ofDocuments documents @ Nocfo.Cashbook.Summary.ofMatches matches do
+            eprintfn "%s" line
         return ExitCodes.EX_OK
     }
 

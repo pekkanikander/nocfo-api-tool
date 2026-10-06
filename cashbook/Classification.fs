@@ -9,12 +9,14 @@ type Origin =
     | Transaction of Transaction
 
 /// An item to post, with the text its keywords are sought in: a book line's `mita` (K2), or a transaction's
-/// `Viesti` and, when it is matched, the `mita` of its book line (K3). The amount is signed.
+/// `Viesti` and, when it is matched, the `mita` of its book line (K3); and the reason tags matching gave it
+/// (M8–M11, P7). The amount is signed.
 type Item =
     { origin: Origin
       date:   DateOnly
       amount: decimal
-      text:   string }
+      text:   string
+      tags:   string list }
 
 /// An item with the offset account it goes to, or none (K7), and whether the rule that chose it flagged it (K1).
 type Classified =
