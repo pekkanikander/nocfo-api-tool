@@ -183,7 +183,7 @@ needs no action.
   `--out`/`--in` override those streams without shell redirection.
 - Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,
   `update contacts`, `update tags`; `delete accounts`, `delete contacts`, `delete documents`,
-  `delete tags`; `create businesses`, `create accounts`, `create contacts`, `create tags`, and
+  `delete tags`, `delete files`; `create businesses`, `create accounts`, `create contacts`, `create tags`, and
   minimal `create documents`; plus `map accounts`, `balance`, `reconcile`, `statement`,
   `cashbook seed`, `cashbook check`, `cashbook match`, `cashbook plan` and `cashbook record`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.

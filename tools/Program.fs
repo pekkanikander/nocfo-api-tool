@@ -183,6 +183,14 @@ let listTags (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>)
         Streams.streamTagRows
         (fun _ row -> async.Return (Ok row))
 
+let listFiles (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    listEntitiesForBusiness<AttachmentRow, AttachmentRow>
+        toolContext
+        args
+        fields
+        Streams.streamAttachmentRows
+        (fun _ row -> async.Return (Ok row))
+
 let private foldCommandResults (printOk: 'Result -> unit) (results: AsyncSeq<Result<'Result, DomainError>>) : Async<int> =
     async {
         let! n =
@@ -217,6 +225,10 @@ let foldTagCommandResults =
         | TagUpdated tag           -> eprintfn "Updated tag %d (%s)" tag.id (defaultArg tag.name "<none>")
         | TagDeleted id            -> eprintfn "Deleted tag %d" id
         | TagCreated tag           -> eprintfn "Created tag %d (%s)" tag.id (defaultArg tag.name "<none>"))
+
+let foldAttachmentCommandResults =
+    foldCommandResults (function
+        | AttachmentDeleted id     -> eprintfn "Deleted file %d" id)
 
 let foldBusinessCommandResults =
     foldCommandResults (function
@@ -336,6 +348,9 @@ let deleteContacts (toolContext: ToolContext) (args: ParseResults<BusinessScoped
 let deleteTags (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
     deleteEntities toolContext args fields TagCommand.DeleteTag Streams.executeTagCommands foldTagCommandResults
 
+let deleteFiles (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) (fields: string list) =
+    deleteEntities toolContext args fields AttachmentCommand.DeleteAttachment Streams.executeAttachmentCommands foldAttachmentCommandResults
+
 // XXX: TODO: Implement an abstract 'command' type and a map of commands to functions.
 let list (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
     async {
@@ -347,6 +362,7 @@ let list (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Contacts args   -> listContacts toolContext args fields
             | EntitiesArgs.Documents args  -> listDocuments toolContext args fields
             | EntitiesArgs.BusinessTags args -> listTags toolContext args fields
+            | EntitiesArgs.Files args      -> listFiles toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
 
@@ -372,6 +388,7 @@ let delete (toolContext: ToolContext) (args: ParseResults<EntitiesArgs>) =
             | EntitiesArgs.Contacts args -> deleteContacts toolContext args fields
             | EntitiesArgs.Documents args -> deleteDocuments toolContext args fields
             | EntitiesArgs.BusinessTags args -> deleteTags toolContext args fields
+            | EntitiesArgs.Files args -> deleteFiles toolContext args fields
             | _ -> failwith "Unknown entity type"
     }
 

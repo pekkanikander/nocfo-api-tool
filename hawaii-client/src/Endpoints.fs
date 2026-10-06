@@ -30,6 +30,12 @@ module Endpoints =
 
     let fileUpload (slug: string) =
         $"/business/{seg slug}/file_upload/"
+    let filesBySlug (slug: string) =
+        $"/business/{seg slug}/files/"
+    let filesBySlugPage (slug: string) (page: int) =
+        paged (filesBySlug slug) page
+    let fileById (slug: string) (id: string) =
+        $"/business/{seg slug}/files/{seg id}/"
 
     let contactsBySlug (slug: string) =
         $"/business/{seg slug}/contacts/"

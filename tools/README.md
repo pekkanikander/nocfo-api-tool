@@ -2,8 +2,8 @@
 
 Thin Argu-based CLI built on top of the shared `hawaii-client` library.
 
-Treat this as the user-facing path for listing businesses/accounts/contacts/documents/tags,
-updating accounts, contacts and tags from CSV, deleting accounts/contacts/documents/tags,
+Treat this as the user-facing path for listing businesses/accounts/contacts/documents/tags/files,
+updating accounts, contacts and tags from CSV, deleting accounts/contacts/documents/tags/files,
 mapping account IDs between environments, and creating tags and minimal documents from CSV.
 
 ## Quick start
@@ -77,6 +77,7 @@ Read-only commands:
 - `list contacts`
 - `list documents`
 - `list tags`
+- `list files`
 - `map accounts`
 - `balance`
 - `reconcile`
@@ -95,6 +96,7 @@ Mutating commands:
 - `delete contacts`
 - `delete documents`
 - `delete tags`
+- `delete files`
 - `create businesses`
 - `create accounts`
 - `create contacts`
@@ -109,6 +111,7 @@ Mutating commands:
 | `list contacts -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams contacts, hydrates them, writes CSV | Contacts are emitted from the `/contacts/` endpoint |
 | `list documents -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams documents, hydrates them, writes CSV | Document mutation commands are separate (`delete documents`, minimal `create documents`) |
 | `list tags -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams tags, writes CSV | Tags are emitted from the `/tags/` endpoint |
+| `list files -b <id> [--fields …]` | Resolves the business (Y-tunnus or VAT code), streams the uploaded files, writes CSV | Files are emitted from the `/files/` endpoint; the listings `cashbook record` attaches are among them |
 | `update businesses [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current business by `slug`, and emits PATCH requests for changed fields only | CSV **must** include `slug`; rows are processed in CSV order |
 | `update accounts -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current account by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
 | `update contacts -b <id> [--fields …]` | Reads CSV from stdin (or `--in`), fetches each current contact by `id`, and emits PATCH requests for changed fields only | CSV **must** include `id`; rows are processed in CSV order and may repeat an `id` |
@@ -117,6 +120,7 @@ Mutating commands:
 | `delete contacts -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `delete documents -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Extra columns are ignored |
 | `delete tags -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | The API detaches a deleted tag from its documents |
+| `delete files -b <id>` | Reads a CSV containing `id` values and issues DELETE calls sequentially | Deleting a document does not delete its attachments; a document's `attachment_ids` column names them |
 | `map accounts -b <id>` | Resolves source+target business contexts and emits `source_id,target_id,number` matches by account `number` | Prints missing-target warnings to stderr; exit code is `EX_DATAERR` when warnings exist |
 | `create businesses [--fields …]` | Reads business-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `name`, optional `slug`, optional `business_id`, and optional `form` |
 | `create accounts -b <id> [--fields …]` | Reads account-create CSV rows from stdin (or `--in`) and POSTs them sequentially | Supports `number`, `name`, optional `type`, `description`, and `opening_balance` |
@@ -235,13 +239,13 @@ The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` fr
 
 ## Internals
 
-- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`, `tags`). `--fields`, `--profile`, and `--dryrun` live at the top level.
+- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`, `tags`, `files`). `--fields`, `--profile`, and `--dryrun` live at the top level.
 - **Config** (`Config.fs`): reads `~/.config/nocfo/config.toml` and resolves a named profile into `ProfileSettings`.
 - **Runtime + Streams** (`Tools.fs`): layers profile settings under env vars, builds `AccountingContext`, and routes CSV readers/writers.
 - **Program flow** (`Program.fs`):
   - `list` commands: stream via `Streams.streamBusinesses`, `Streams.streamAccounts`, `Streams.streamContacts`, `Streams.streamDocuments`, or `Streams.streamTags`, hydrate rows (`Streams.hydrateAndUnwrap`), write CSV lazily.
   - `update businesses/accounts/contacts/tags`: read CSV into repo-owned delta records, fetch the current entity (`slug` for businesses, `id` for the rest), normalize against that fresh API state, and PATCH immediately when something changed.
-  - `delete` accounts/contacts/documents/tags: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
+  - `delete` accounts/contacts/documents/tags/files: read CSV `id` rows, map them to command DUs, and execute them through the shared command stream machinery.
   - `map accounts`: align source/target account streams by `number` and output `source_id,target_id,number`.
   - `create` businesses/accounts/contacts/documents/tags: read create payload rows, optionally rewrite blueprint account IDs for documents, and POST sequentially through the shared command stream machinery.
   - `balance`: POST the ledger report for the period, narrow it to the selected accounts, and write one row per entry (or one per day with `--daily`).

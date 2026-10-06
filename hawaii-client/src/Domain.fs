@@ -172,6 +172,7 @@ type DocumentResult =
 /// ------------------------------------------------------------
 
 type AttachmentFull = NocfoApi.Types.AttachmentInstance
+type AttachmentRow  = NocfoApi.Types.AttachmentList
 
 /// A file for `POST /file_upload/`, its content base64-encoded; the attachment it becomes is attached to a
 /// document by its id.
@@ -179,6 +180,12 @@ type FileUploadPayload =
   { name: string
     ``type``: string
     file: string }
+
+type AttachmentCommand =
+  | DeleteAttachment of attachmentId:int
+
+type AttachmentResult =
+  | AttachmentDeleted of int
 
 /// ------------------------------------------------------------
 /// Contacts
@@ -654,6 +661,12 @@ module Streams =
        (fun page -> Endpoints.tagsBySlugPage context.key.slug page)
     |> toDomain id
 
+  let streamAttachmentRows (context: BusinessContext) : AsyncSeq<Result<AttachmentRow, DomainError>> =
+    Streams.streamPaginated<PaginatedAttachmentListList, AttachmentRow>
+       context.ctx.http
+       (fun page -> Endpoints.filesBySlugPage context.key.slug page)
+    |> toDomain id
+
   /// Domain-level stream of accounts for a given business, yielding lazy Partials
   /// that can be hydrated to Full on demand
   let streamAccounts (context: BusinessContext) : AsyncSeq<Result<Account, DomainError>> =
@@ -824,6 +837,23 @@ module Streams =
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.tagById context.key.slug (string id))
             |> AsyncResult.map (fun () -> TagDeleted id)
+
+    executeCommands context formatDryRun mapToOperation commands
+
+  let executeAttachmentCommands
+    (context: BusinessContext)
+    (commands: AsyncSeq<Result<AttachmentCommand, DomainError>>)
+    : AsyncSeq<Result<AttachmentResult, DomainError>> =
+
+    let formatDryRun = function
+      | AttachmentCommand.DeleteAttachment id ->
+          sprintf "DELETE %s" (Endpoints.fileById context.key.slug (string id))
+
+    let mapToOperation = function
+      | AttachmentCommand.DeleteAttachment id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.fileById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> AttachmentDeleted id)
 
     executeCommands context formatDryRun mapToOperation commands
 

@@ -25,6 +25,7 @@ type EntitiesArgs =
     | [< NoPrefix; SubCommand >]                  Contacts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<BusinessScopedArgs>
     | [< SubCommand; CustomCommandLine("tags") >] BusinessTags of ParseResults<BusinessScopedArgs>
+    | [< NoPrefix; SubCommand >]                  Files of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Businesses of ParseResults<BusinessesArgs>
     interface IArgParserTemplate with
         member this.Usage =
@@ -34,6 +35,7 @@ type EntitiesArgs =
             | Contacts _   -> "Contacts of a business."
             | Documents _  -> "Documents of a business."
             | BusinessTags _ -> "Tags of a business."
+            | Files _      -> "Files of a business (list and delete only)."
             | Businesses _ -> "Businesses."
 
 [<RequireSubcommand>]

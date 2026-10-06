@@ -38,3 +38,9 @@ let ``Dated document pages append the date range to the paging query`` () =
 let ``File uploads are posted under the business`` () =
     let result = Endpoints.fileUpload "acme"
     test <@ result = "/business/acme/file_upload/" @>
+
+[<Fact>]
+let ``Files are listed and addressed under the business`` () =
+    let page = Endpoints.filesBySlugPage "acme" 1
+    let file = Endpoints.fileById "acme" "42"
+    test <@ (page, file) = ("/business/acme/files/?page_size=100&page=1", "/business/acme/files/42/") @>

@@ -135,9 +135,9 @@ Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 
 | verb | entities |
 | --- | --- |
-| `list` | businesses, accounts, contacts, documents, tags |
+| `list` | businesses, accounts, contacts, documents, tags, files |
 | `update` | businesses, accounts, contacts, documents, tags |
-| `delete` | accounts, contacts, documents, tags |
+| `delete` | accounts, contacts, documents, tags, files |
 | `create` | businesses, accounts, contacts, documents, tags |
 | `map` | accounts (source → target env, keyed on account number) |
 | `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
@@ -200,7 +200,7 @@ document becomes) → `Program.fs`.
 
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
 - API coverage: businesses, accounts, contacts, documents, tags, and the ledger report. Not covered:
-  entries, periods, other reports, VAT, files beyond the upload, invoicing. See `ROADMAP.md` Phase 5.
+  entries, periods, other reports, VAT, files beyond the upload, the list and the delete, invoicing. See `ROADMAP.md` Phase 5.
 
 ---
 

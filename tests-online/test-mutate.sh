@@ -10,6 +10,7 @@ setup_online_test_env
 require_local_online_profile
 load_fixture_config
 require_mutate_fixtures
+require_cashbook_fixtures
 build_cli_once
 require_working_token
 
@@ -66,6 +67,84 @@ if run_create_case \
     "delete tag" \
     "${TEST_TAG_ID}" \
     tags -b "${TEST_BUSINESS_SLUG}" || true
+fi
+
+# cashbook record posts the exact-multi fixture against the fixture accounts: three
+# drafts, each with its listing attached. A second run must create nothing (P5).
+# The drafts are found by the marker and deleted with their listings.
+CASHBOOK_DIR="${WORK_DIR}/cashbook"
+CASHBOOK_MARKER="[online-test]"
+mkdir -p "${CASHBOOK_DIR}"
+cp "${REPO_ROOT}/tests/fixtures/cashbook/exact-multi/kassakirja.csv" \
+   "${REPO_ROOT}/tests/fixtures/cashbook/exact-multi/mobilepay.csv" "${CASHBOOK_DIR}/"
+cat > "${CASHBOOK_DIR}/rules.toml" <<EOF
+[accounts]
+cash         = { number = "${TEST_CASHBOOK_CASH}", name = "Kassa" }
+mobilepay    = { number = "${TEST_CASHBOOK_MOBILEPAY}", name = "MobilePay" }
+fees         = { number = "${TEST_CASHBOOK_FEES}", name = "Palvelumaksut" }
+unclassified = { number = "${TEST_CASHBOOK_UNCLASSIFIED}", name = "Selvittelytili" }
+
+[mobilepay]
+payment_in = ["Maksa Lippaaseen"]
+fee        = ["Palvelumaksu"]
+expense    = []
+payout     = []
+
+[matching]
+days_before = 1
+days_after  = 3
+max_subset  = 8
+tolerance   = 0.50
+weight_unmatched     = 100
+weight_near_miss     = 10
+weight_date_distance = 1
+weight_subset_size   = 0.1
+weight_coherence     = -5
+
+[classification]
+majority_min    = 3
+same_amount_min = 3
+
+[[classification.income]]
+account  = "${TEST_CASHBOOK_INCOME}"
+name     = "Tanssit"
+keywords = ["tanssit"]
+
+[coalesce.cash]
+max_days = 3
+max_gap  = 1
+
+[coalesce.mobilepay]
+max_days = 4
+max_gap  = 1
+
+[coalesce.fees]
+max_days = 7
+max_gap  = 7
+
+[posting]
+marker = "${CASHBOOK_MARKER}"
+EOF
+
+readonly -a CASHBOOK_RECORD=(
+  cashbook record -b "${TEST_BUSINESS_SLUG}"
+  -k "${CASHBOOK_DIR}/kassakirja.csv" -m "${CASHBOOK_DIR}/mobilepay.csv" -r "${CASHBOOK_DIR}/rules.toml"
+)
+
+if run_command_case "cashbook record" 'Created document' '' "${CASHBOOK_RECORD[@]}"; then
+  run_command_case "cashbook record again creates nothing" '' 'Created document|unclaimed draft' \
+    "${CASHBOOK_RECORD[@]}" || true
+fi
+
+if run_command_case "list recorded documents" '' '' \
+     list documents -b "${TEST_BUSINESS_SLUG}" --fields "id,description,attachment_ids"; then
+  while IFS=, read -r document_id attachment_ids; do
+    run_delete_case "delete recorded document ${document_id}" "${document_id}" \
+      documents -b "${TEST_BUSINESS_SLUG}" || true
+    for file_id in ${attachment_ids//;/ }; do
+      run_delete_case "delete listing ${file_id}" "${file_id}" files -b "${TEST_BUSINESS_SLUG}" || true
+    done
+  done < <(csv_rows_with_prefix "${CASE_STDOUT}" description "${CASHBOOK_MARKER}" "id,attachment_ids")
 fi
 
 print_summary_and_exit

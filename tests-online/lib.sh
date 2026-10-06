@@ -18,6 +18,8 @@ FAIL_COUNT=0
 WORK_DIR=""
 TEST_BUSINESS_SLUG=""
 CREATED_ID=""
+CASE_STDOUT=""
+CASE_STDERR=""
 
 setup_online_test_env() {
   WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/nocfo-online-tests.XXXXXX")"
@@ -85,6 +87,18 @@ require_mutate_fixtures() {
 ${ONLINE_FIXTURE_FILE} must define TEST_ACCOUNT_ID with a stable api-tst account id.
 
 Current value: ${TEST_ACCOUNT_ID:-<unset>}
+EOF
+    exit 2
+  fi
+}
+
+require_cashbook_fixtures() {
+  if [ -z "${TEST_CASHBOOK_CASH:-}" ] || [ -z "${TEST_CASHBOOK_MOBILEPAY:-}" ] || [ -z "${TEST_CASHBOOK_FEES:-}" ] \
+     || [ -z "${TEST_CASHBOOK_UNCLASSIFIED:-}" ] || [ -z "${TEST_CASHBOOK_INCOME:-}" ]; then
+    cat >&2 <<EOF
+${ONLINE_FIXTURE_FILE} must define TEST_CASHBOOK_CASH, TEST_CASHBOOK_MOBILEPAY, TEST_CASHBOOK_FEES,
+TEST_CASHBOOK_UNCLASSIFIED and TEST_CASHBOOK_INCOME: account numbers of the api-tst business, the first
+four of the balance sheet and the last a revenue account. Used by the cashbook record case.
 EOF
     exit 2
   fi
@@ -238,6 +252,23 @@ with open(path, newline="", encoding="utf-8") as fh:
 
 print(f"{path} has no row where {id_col}={id_val!r}.", file=sys.stderr)
 sys.exit(1)
+PY
+}
+
+# Prints `target_columns` (comma-separated) of every row whose `column` starts with
+# `prefix`, one row per line, the values comma-separated.
+csv_rows_with_prefix() {
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
+import csv
+import sys
+
+path, column, prefix, targets = sys.argv[1:]
+targets = targets.split(",")
+
+with open(path, newline="", encoding="utf-8") as fh:
+    for row in csv.DictReader(fh):
+        if (row.get(column) or "").startswith(prefix):
+            print(",".join(row.get(target, "") for target in targets))
 PY
 }
 
@@ -454,6 +485,74 @@ run_mutate_case() {
       [ -n "${line}" ] && printf '    - %s\n' "${line}"
     done <<< "${failures}"
     printf '  artifacts: %s\n' "${WORK_DIR}"
+    return 1
+  fi
+
+  PASS_COUNT=$((PASS_COUNT + 1))
+  printf 'PASS %s\n' "${case_name}"
+  return 0
+}
+
+# Runs one command, requiring exit 0, no unhandled exception, and that stderr
+# matches `required` and does not match `forbidden` (either may be empty). The
+# stdout and stderr files are left in CASE_STDOUT and CASE_STDERR.
+run_command_case() {
+  local case_name="$1"
+  local required="$2"
+  local forbidden="$3"
+  shift 3
+
+  local case_slug
+  case_slug="$(printf '%s' "${case_name}" | tr ' /' '__')"
+  CASE_STDOUT="${WORK_DIR}/${case_slug}.stdout"
+  CASE_STDERR="${WORK_DIR}/${case_slug}.stderr"
+  local command_file="${WORK_DIR}/${case_slug}.command"
+
+  local -a cmd=(
+    dotnet run --project tools --no-build -- --profile "${ONLINE_PROFILE_NAME}" --verbose "$@"
+  )
+
+  printf '%q ' "${cmd[@]}" > "${command_file}"
+  printf '\n' >> "${command_file}"
+
+  local exit_code=0
+  set +e
+  (
+    cd "${REPO_ROOT}"
+    "${cmd[@]}"
+  ) >"${CASE_STDOUT}" 2>"${CASE_STDERR}"
+  exit_code=$?
+  set -e
+
+  local failures=""
+
+  if [ "${exit_code}" -ne 0 ]; then
+    failures="${failures}non-zero exit code: ${exit_code}"$'\n'
+  fi
+
+  if stderr_has_unhandled_exception "${CASE_STDERR}"; then
+    failures="${failures}stderr contains an unhandled exception signature"$'\n'
+  fi
+
+  if [ -n "${required}" ] && ! grep -Eq "${required}" "${CASE_STDERR}"; then
+    failures="${failures}stderr does not match '${required}'"$'\n'
+  fi
+
+  if [ -n "${forbidden}" ] && grep -Eq "${forbidden}" "${CASE_STDERR}"; then
+    failures="${failures}stderr matches '${forbidden}'"$'\n'
+  fi
+
+  if [ -n "${failures}" ]; then
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    printf 'FAIL %s\n' "${case_name}"
+    printf '  command: %s\n' "$(cat "${command_file}")"
+    printf '  exit code: %s\n' "${exit_code}"
+    printf '  stdout: %s\n' "${CASE_STDOUT}"
+    printf '  stderr: %s\n' "${CASE_STDERR}"
+    printf '  reasons:\n'
+    while IFS= read -r line; do
+      [ -n "${line}" ] && printf '    - %s\n' "${line}"
+    done <<< "${failures}"
     return 1
   fi
 
