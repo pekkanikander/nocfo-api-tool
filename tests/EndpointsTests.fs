@@ -28,3 +28,13 @@ let ``Paged endpoints append the paging query once`` () =
 let ``Business list paging matches the list url`` () =
     let result = Endpoints.businessList 1
     test <@ result = Endpoints.businessListUrl + "?page_size=100&page=1" @>
+
+[<Fact>]
+let ``Dated document pages append the date range to the paging query`` () =
+    let result = Endpoints.documentsBySlugDatedPage "acme" "2026-07-18" "2026-07-20" 2
+    test <@ result = "/business/acme/document/?page_size=100&page=2&date_from=2026-07-18&date_to=2026-07-20" @>
+
+[<Fact>]
+let ``File uploads are posted under the business`` () =
+    let result = Endpoints.fileUpload "acme"
+    test <@ result = "/business/acme/file_upload/" @>

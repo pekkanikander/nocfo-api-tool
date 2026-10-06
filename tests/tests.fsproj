@@ -39,5 +39,6 @@
     <Compile Include="MatchingTests.fs" />
     <Compile Include="ClassificationTests.fs" />
     <Compile Include="PlanTests.fs" />
+    <Compile Include="RecordTests.fs" />
   </ItemGroup>
 </Project>

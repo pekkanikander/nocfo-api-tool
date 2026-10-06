@@ -142,6 +142,26 @@ module PlanReport =
     /// `plan.csv` (P1): one row per document, in the plan's order.
     let render (documents: Document list) : string = Report.render (documents |> List.map row)
 
+/// The listing attached to a document (P12): its description, then one line per source row in the document's
+/// order giving the date, the source, the text, the remark or name, the signed amount and the receipt count
+/// or the transaction id, tab-separated.
+module Listing =
+
+    /// The file name: the description with `/` replaced by `-` and `.txt` appended.
+    let name (document: Document) = document.description.Replace('/', '-') + ".txt"
+
+    let private cells (origin: Origin) =
+        match origin with
+        | Origin.Line line ->
+            [ Report.day line.date; $"sivu {line.page}"; line.text; line.remark; Report.amount line.amount
+              $"{line.receipts} kuittia" ]
+        | Origin.Transaction transaction ->
+            [ Report.day transaction.date; "MobilePay " + transaction.time.ToString("HH:mm", CultureInfo.InvariantCulture)
+              transaction.text; transaction.name; Report.amount transaction.amount; transaction.id ]
+
+    let render (document: Document) : string =
+        document.description + "\n" + String.concat "" [ for origin in document.rows -> String.concat "\t" (cells origin) + "\n" ]
+
 /// The lines of the run's summary on stderr (R4).
 module Summary =
 

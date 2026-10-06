@@ -73,5 +73,8 @@ module CashBook =
           receipts  = row.Parse("kuitti", "a count or empty", asCount, 0)
           remark    = row.String "huom" }
 
-    /// Reads a cash book (I1–I3); every malformed line is reported with its file line.
-    let read (text: string) : Result<CashBookLine list, string list> = CsvReader.read ";" header text line
+    /// Reads a cash book (I1–I3), leaving out every malformed line and reporting it with its file line (P9).
+    let readRows (text: string) : Result<CashBookLine list * string list, string> = CsvReader.readRows ";" header text line
+
+    /// Every line of a cash book, or every error in it.
+    let read (text: string) : Result<CashBookLine list, string list> = CsvReader.strict (readRows text)

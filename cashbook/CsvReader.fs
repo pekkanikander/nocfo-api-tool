@@ -6,13 +6,12 @@ open System.IO
 open CsvHelper
 open CsvHelper.Configuration
 
-/// Strict reading of a delimited file into records, one per row: the header must be exactly the one
-/// expected, and a cell that does not convert is an error located by its file line. Errors accumulate
-/// rather than stop the read, so every error in the file is reported, in file order.
+/// Reading of a delimited file into records, one per row: the header must be exactly the one expected,
+/// and a cell that does not convert is an error located by its file line. Errors accumulate rather than
+/// stop the read, so every error in the file is reported, in file order.
 module CsvReader =
 
-    /// One row of the file. A cell that fails yields a placeholder, which goes nowhere once there is an
-    /// error.
+    /// One row of the file. A cell that fails yields a placeholder, which goes nowhere: the row is left out.
     type Row internal (errors: ResizeArray<string>, line: int, cells: string[], columns: IDictionary<string, int>) =
 
         let fail (message: string) = errors.Add $"[L{line}] {message}"
@@ -34,22 +33,37 @@ module CsvReader =
                 fallback
 
     /// Reads every row of the text with `row`. A byte order mark is accepted; the header must be
-    /// `header` exactly, and every row must have as many cells as it.
-    let read (delimiter: string) (header: string list) (text: string) (row: Row -> 'T) : Result<'T list, string list> =
+    /// `header` exactly, which is the one error that fails the read. The rows read are returned with the
+    /// errors of the rows left out, so that a caller may drop just those rows (P9).
+    let readRows (delimiter: string) (header: string list) (text: string) (row: Row -> 'T)
+        : Result<'T list * string list, string> =
         let configuration = CsvConfiguration(CultureInfo.InvariantCulture, Delimiter = delimiter)
         use parser = new CsvParser(new StringReader(text.TrimStart '\uFEFF'), configuration)
         let found = if parser.Read() then List.ofArray parser.Record else []
         if found <> header then
             let expected, actual = String.concat delimiter header, String.concat delimiter found
-            Error [ $"[L1] the header must be '{expected}', not '{actual}'" ]
+            Error $"[L1] the header must be '{expected}', not '{actual}'"
         else
             let errors = ResizeArray<string>()
             let columns = header |> List.mapi (fun index column -> column, index) |> dict
             let rows =
                 [ while parser.Read() do
                       if parser.Record.Length = header.Length then
-                          yield row (Row(errors, parser.RawRow, parser.Record, columns))
+                          let before = errors.Count
+                          let value = row (Row(errors, parser.RawRow, parser.Record, columns))
+                          if errors.Count = before then yield value
                       else
                           let cells = parser.Record.Length
                           errors.Add $"[L{parser.RawRow}] expected {header.Length} cells, found {cells}" ]
-            if errors.Count = 0 then Ok rows else Error (List.ofSeq errors)
+            Ok (rows, List.ofSeq errors)
+
+    /// Every row, or every error: the header's alone, or those of the rows left out.
+    let strict (read: Result<'T list * string list, string>) : Result<'T list, string list> =
+        match read with
+        | Ok (rows, [])  -> Ok rows
+        | Ok (_, errors) -> Error errors
+        | Error header   -> Error [ header ]
+
+    /// Reads every row of the text with `row`, strictly.
+    let read (delimiter: string) (header: string list) (text: string) (row: Row -> 'T) : Result<'T list, string list> =
+        strict (readRows delimiter header text row)

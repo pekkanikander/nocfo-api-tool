@@ -100,6 +100,7 @@ Mutating commands:
 - `create contacts`
 - `create documents`
 - `create tags`
+- `cashbook record`
 
 | Command | Description | Notes |
 | --- | --- | --- |
@@ -128,6 +129,7 @@ Mutating commands:
 | `cashbook check -b <id> -r <rules.toml>` | Parses the rules file strictly and checks every account it names against the chart of accounts | One line per finding; a missing account is an error (exit 65), a name that differs from NoCFO's a warning; parse errors go to stderr |
 | `cashbook match -k <cashbook.csv> -m <mobilepay.csv> -r <rules.toml> [--from <date>] [--to <date>]` | Matches the cash-book lines against the MobilePay Box export and writes `match.csv` | Local files only, no API; `--from`/`--to` restrict both inputs to the period; a malformed row is an error (exit 65) located by file and line |
 | `cashbook plan -k <cashbook.csv> -m <mobilepay.csv> -r <rules.toml> [--match <match.csv>] [--from <date>] [--to <date>]` | Classifies and coalesces the posted items into the documents to record and writes `plan.csv`, each document with its reason tags | Local files only, no API; matches afresh unless `--match` gives a `match.csv`, whose tiers and transaction ids are taken as given; the book-only and possible-mp lines and the tagged document counts go to stderr |
+| `cashbook record -b <id> -k <cashbook.csv> -m <mobilepay.csv> -r <rules.toml> [--match <match.csv>] [--from <date>] [--to <date>] [--force]` | Matches, plans and records the documents as drafts, each with a text listing of its rows attached and, when it carries reason tags, flagged and tagged with them | Refuses on a rules account missing from the chart and, without `--force`, on a malformed row or a MobilePay-marked line matched to nothing (exit 65); `--force` drops the malformed rows and leaves those lines unrecorded; a document already recorded with the same date, accounts, amount and description is skipped, and the marker drafts no planned document claims are listed on stderr; `-n` prints `plan.csv` instead and exits as the upload would |
 
 ### Reconciliation sources
 
@@ -233,7 +235,7 @@ The context wraps the shared `Http.createHttpContext` and `Accounting.ofHttp` fr
 
 ## Internals
 
-- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`, `tags`). `--fields`, `--profile`, and `--dry-run` live at the top level.
+- **Arguments** (`Arguments.fs`): Argu discriminated unions define `list`, `update`, `delete`, and nested subcommands (`businesses`, `accounts`, `contacts`, `documents`, `tags`). `--fields`, `--profile`, and `--dryrun` live at the top level.
 - **Config** (`Config.fs`): reads `~/.config/nocfo/config.toml` and resolves a named profile into `ProfileSettings`.
 - **Runtime + Streams** (`Tools.fs`): layers profile settings under env vars, builds `AccountingContext`, and routes CSV readers/writers.
 - **Program flow** (`Program.fs`):

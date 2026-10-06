@@ -24,6 +24,12 @@ module Endpoints =
         paged (documentsBySlug slug) page
     let documentById (slug: string) (id: string) =
         $"/business/{seg slug}/document/{seg id}/"
+    /// The documents dated within the period, both ends inclusive.
+    let documentsBySlugDatedPage (slug: string) (dateFrom: string) (dateTo: string) (page: int) =
+        paged (documentsBySlug slug) page + $"&date_from={seg dateFrom}&date_to={seg dateTo}"
+
+    let fileUpload (slug: string) =
+        $"/business/{seg slug}/file_upload/"
 
     let contactsBySlug (slug: string) =
         $"/business/{seg slug}/contacts/"

@@ -788,18 +788,20 @@ let private cashbookAccount (row: AccountRow) : Nocfo.Cashbook.Account option =
     | None -> None
     | Some accountType -> Some { number = row.number; name = row.name; kind = cashbookKind accountType }
 
+/// The business's account rows: the chart `Rules.check` sees (V2), and the ids the posting needs (P3).
+let private cashbookAccounts (context: BusinessContext) =
+    Streams.streamAccountRows context
+    |> AsyncSeqResult.unwrapOrThrow
+    |> AsyncSeq.toListAsync
+
 let private cashbookChart (accounting: AccountingContext) (businessId: string) =
     async {
         let! businessContext = resolveBusinessContext accounting businessId
         match businessContext with
         | Error error -> return Error error
         | Ok context ->
-            let! accounts =
-                Streams.streamAccountRows context
-                |> AsyncSeqResult.unwrapOrThrow
-                |> AsyncSeq.choose cashbookAccount
-                |> AsyncSeq.toListAsync
-            return Ok accounts
+            let! accounts = cashbookAccounts context
+            return Ok (accounts |> List.choose cashbookAccount)
     }
 
 let cashbookSeed (toolContext: ToolContext) (args: ParseResults<BusinessScopedArgs>) =
@@ -838,8 +840,25 @@ let cashbookCheck (toolContext: ToolContext) (args: ParseResults<CashbookCheckAr
             else ExitCodes.EX_OK
     }
 
-/// The rules, and the book lines and transactions of the period, as `match` and `plan` read them.
-let private readCashbookInputs (rulesPath: string) (bookPath: string) (exportPath: string)
+/// A cash-book input file read by `readRows`, which leaves out the malformed rows: each is named on stderr
+/// (P9, `--force`).
+let private readCashbookRows (path: string) (readRows: string -> Result<'T list * string list, string>) =
+    match File.ReadAllText path |> readRows with
+    | Error header -> Error (DomainError.BadData $"{path}: {header}")
+    | Ok (rows, dropped) ->
+        for error in dropped do eprintfn "%s: %s, dropped" path error
+        Ok rows
+
+/// The matches of the run: afresh, or as a `match.csv` gives them (P8).
+let private cashbookMatches (matchPath: string option) (rules: Nocfo.Cashbook.Rules) (lines: Nocfo.Cashbook.CashBookLine list)
+                            (transactions: Nocfo.Cashbook.Transaction list) =
+    match matchPath with
+    | None -> Ok (Nocfo.Cashbook.Matching.run rules lines transactions)
+    | Some path -> readCashbookFile path (Nocfo.Cashbook.MatchReport.read lines transactions)
+
+/// The rules, and the book lines and transactions of the period, as `match` and `plan` read them; `force`
+/// drops the malformed rows instead of failing on them (P9).
+let private readCashbookInputs (force: bool) (rulesPath: string) (bookPath: string) (exportPath: string)
                                (dateFrom: string option) (dateTo: string option) =
     match parseDay "--from" dateFrom, parseDay "--to" dateTo with
     | Error error, _
@@ -850,8 +869,14 @@ let private readCashbookInputs (rulesPath: string) (bookPath: string) (exportPat
     | Error error -> Error error
     | Ok rules ->
 
-    let export = Nocfo.Cashbook.MobilePay.read rules.mobilepay
-    match readCashbookFile bookPath Nocfo.Cashbook.CashBook.read, readCashbookFile exportPath export with
+    let book, export =
+        if force then
+            readCashbookRows bookPath Nocfo.Cashbook.CashBook.readRows,
+            readCashbookRows exportPath (Nocfo.Cashbook.MobilePay.readRows rules.mobilepay)
+        else
+            readCashbookFile bookPath Nocfo.Cashbook.CashBook.read,
+            readCashbookFile exportPath (Nocfo.Cashbook.MobilePay.read rules.mobilepay)
+    match book, export with
     | Error error, _
     | _, Error error -> Error error
     | Ok lines, Ok transactions ->
@@ -864,7 +889,7 @@ let private readCashbookInputs (rulesPath: string) (bookPath: string) (exportPat
 
 let cashbookMatch (output: TextWriter) (args: ParseResults<CashbookMatchArgs>) =
     async {
-        match readCashbookInputs (args.GetResult CashbookMatchArgs.Rules) (args.GetResult CashbookMatchArgs.CashBook)
+        match readCashbookInputs false (args.GetResult CashbookMatchArgs.Rules) (args.GetResult CashbookMatchArgs.CashBook)
                                  (args.GetResult CashbookMatchArgs.MobilePay) (args.TryGetResult CashbookMatchArgs.DateFrom)
                                  (args.TryGetResult CashbookMatchArgs.DateTo) with
         | Error error -> return mapDomainErrorToExitCode error
@@ -878,17 +903,13 @@ let cashbookMatch (output: TextWriter) (args: ParseResults<CashbookMatchArgs>) =
 
 let cashbookPlan (output: TextWriter) (args: ParseResults<CashbookPlanArgs>) =
     async {
-        match readCashbookInputs (args.GetResult CashbookPlanArgs.Rules) (args.GetResult CashbookPlanArgs.CashBook)
+        match readCashbookInputs false (args.GetResult CashbookPlanArgs.Rules) (args.GetResult CashbookPlanArgs.CashBook)
                                  (args.GetResult CashbookPlanArgs.MobilePay) (args.TryGetResult CashbookPlanArgs.DateFrom)
                                  (args.TryGetResult CashbookPlanArgs.DateTo) with
         | Error error -> return mapDomainErrorToExitCode error
         | Ok (rules, lines, transactions) ->
 
-        let matches =
-            match args.TryGetResult CashbookPlanArgs.Match with
-            | None -> Ok (Nocfo.Cashbook.Matching.run rules lines transactions)
-            | Some path -> readCashbookFile path (Nocfo.Cashbook.MatchReport.read lines transactions)
-        match matches with
+        match cashbookMatches (args.TryGetResult CashbookPlanArgs.Match) rules lines transactions with
         | Error error -> return mapDomainErrorToExitCode error
         | Ok matches ->
 
@@ -899,13 +920,99 @@ let cashbookPlan (output: TextWriter) (args: ParseResults<CashbookPlanArgs>) =
         return ExitCodes.EX_OK
     }
 
+/// The ids of the reason tags the documents carry, by name, the tags not yet in the business created (P7).
+let private cashbookTags (context: BusinessContext) (documents: Nocfo.Cashbook.Document list) =
+    async {
+        let! tags = Streams.streamTagRows context |> AsyncSeqResult.unwrapOrThrow |> AsyncSeq.toListAsync
+        let known = tags |> List.choose (fun tag -> tag.name |> Option.map (fun name -> name, tag.id)) |> Map.ofList
+        let! created =
+            documents
+            |> List.collect (fun document -> document.tags)
+            |> List.distinct
+            |> List.filter (fun name -> not (known.ContainsKey name))
+            |> List.map (fun name -> Ok (TagCommand.CreateTag { name = name; description = None; color = None }))
+            |> AsyncSeq.ofSeq
+            |> Streams.executeTagCommands context
+            |> AsyncSeqResult.unwrapOrThrow
+            |> AsyncSeq.choose (function TagCreated tag -> Some (tag.name.Value, tag.id) | _ -> None)
+            |> AsyncSeq.toListAsync
+        return List.fold (fun tags (name, id) -> Map.add name id tags) known created
+    }
+
+/// `record` (P8): the plan of `plan`, checked against the business (V2) and posted as drafts, each with its
+/// listing attached (P12); under `--dryrun` the plan is printed instead and the exit status is the upload's
+/// (P9). A planned document already recorded is not created again (P5).
+let cashbookRecord (toolContext: ToolContext) (args: ParseResults<CashbookRecordArgs>) =
+    async {
+        let force = args.Contains CashbookRecordArgs.Force
+        match readCashbookInputs force (args.GetResult CashbookRecordArgs.Rules) (args.GetResult CashbookRecordArgs.CashBook)
+                                 (args.GetResult CashbookRecordArgs.MobilePay) (args.TryGetResult CashbookRecordArgs.DateFrom)
+                                 (args.TryGetResult CashbookRecordArgs.DateTo) with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok (rules, lines, transactions) ->
+
+        let! businessContext = resolveBusinessContext toolContext.Accounting (args.GetResult CashbookRecordArgs.BusinessId)
+        match businessContext with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok context ->
+
+        let! accounts = cashbookAccounts context
+        let findings = Nocfo.Cashbook.Rules.check (accounts |> List.choose cashbookAccount) rules
+        for finding in findings do eprintfn "%s" (Nocfo.Cashbook.Finding.describe finding)
+        if findings |> List.exists Nocfo.Cashbook.Finding.isError then return ExitCodes.EX_DATAERR else
+
+        match cashbookMatches (args.TryGetResult CashbookRecordArgs.Match) rules lines transactions with
+        | Error error -> return mapDomainErrorToExitCode error
+        | Ok matches ->
+
+        let dryRun = toolContext.Accounting.options.dryRun
+        let documents = Nocfo.Cashbook.Plan.build rules matches
+        if dryRun then toolContext.Output.Write (Nocfo.Cashbook.PlanReport.render documents)
+        for line in Nocfo.Cashbook.Summary.ofDocuments documents @ Nocfo.Cashbook.Summary.ofMatches matches do
+            eprintfn "%s" line
+        let blocking (lineMatch: Nocfo.Cashbook.LineMatch) =
+            lineMatch.tier = Nocfo.Cashbook.Tier.BookOnly && lineMatch.note <> Some Nocfo.Cashbook.Note.OutsideExport
+        if matches.lines |> List.exists blocking && not force then
+            eprintfn "nothing recorded: the book-only lines above are unmatched (--force records the rest)"
+            return ExitCodes.EX_DATAERR
+        else
+
+        let ids = accounts |> List.map (fun account -> account.number, account.id) |> Map.ofList
+        let dates = documents |> List.map (fun document -> document.date)
+        let! existing =
+            if documents.IsEmpty then async.Return [] else
+            Streams.streamDocumentRowsDated context (Record.day (List.min dates)) (Record.day (List.max dates))
+            |> AsyncSeqResult.unwrapOrThrow
+            |> AsyncSeq.toListAsync
+        let marked =
+            existing |> List.filter (fun row ->
+                row.description |> Option.exists (fun text -> text.StartsWith(rules.posting.marker, StringComparison.Ordinal)))
+        let planned = documents |> List.filter (fun document -> not (marked |> List.exists (Record.recorded ids document)))
+        for row in marked do
+            if row.is_draft = Some true && not (documents |> List.exists (fun document -> Record.recorded ids document row)) then
+                eprintfn "unclaimed draft: %d, %s, %s" row.id (defaultArg row.date "") (defaultArg row.description "")
+        if dryRun then return ExitCodes.EX_OK else
+
+        let! tags = cashbookTags context planned
+        return!
+            planned
+            |> AsyncSeq.ofSeq
+            |> AsyncSeq.mapAsync (fun document ->
+                Attachment.upload context (Record.attachment document)
+                |> NocfoClient.AsyncResult.map (fun attachment ->
+                    DocumentCommand.CreateDocument (Record.payload ids tags attachment.id document)))
+            |> Streams.executeDocumentCommands context
+            |> foldDocumentCommandResults
+    }
+
 /// `match` and `plan` read local files only; the other verbs need the chart of accounts, hence the API.
 let cashbook (toolContext: Lazy<ToolContext>) (output: TextWriter) (args: ParseResults<CashbookArgs>) =
     match args.GetSubCommand() with
-    | CashbookArgs.Seed seedArgs   -> cashbookSeed  toolContext.Value seedArgs
-    | CashbookArgs.Check checkArgs -> cashbookCheck toolContext.Value checkArgs
-    | CashbookArgs.Match matchArgs -> cashbookMatch output matchArgs
-    | CashbookArgs.Plan planArgs   -> cashbookPlan  output planArgs
+    | CashbookArgs.Seed seedArgs     -> cashbookSeed   toolContext.Value seedArgs
+    | CashbookArgs.Check checkArgs   -> cashbookCheck  toolContext.Value checkArgs
+    | CashbookArgs.Match matchArgs   -> cashbookMatch  output matchArgs
+    | CashbookArgs.Plan planArgs     -> cashbookPlan   output planArgs
+    | CashbookArgs.Record recordArgs -> cashbookRecord toolContext.Value recordArgs
 
 let private run (parser: ArgumentParser<CliArgs>) argv =
     let results: ParseResults<CliArgs> =

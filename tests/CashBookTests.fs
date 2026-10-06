@@ -64,3 +64,14 @@ let ``The header must be the book's, in its order`` () =
 [<Fact>]
 let ``A line with the wrong number of cells is located`` () =
     test <@ errors (header + "1;2026-07-18;x;1,00;;\n") = [ "[L2] expected 8 cells, found 6" ] @>
+
+[<Fact>]
+let ``Read leniently, a malformed line is left out and located, the others kept (P9)`` () =
+    let result = CashBook.readRows (header + "1;2026-07-18;Tanssit;10,00;;;;\n1;2026-07-18;x;1,00;;lasku;;\n1;2026-07-19;Kahvila;2,00;;;;\n")
+    test <@ Result.map (fun (lines, errors) -> List.map (fun line -> line.text) lines, errors) result
+              = Ok ([ "Tanssit"; "Kahvila" ], [ "[L3] 'tapa' must be MP, MP?, KÄT, KT, KÄ or empty, not 'lasku'" ]) @>
+
+[<Fact>]
+let ``Read leniently, a wrong header still fails the file`` () =
+    test <@ CashBook.readRows "pvm;sivu;mita;tulo;meno;tapa;kuitti;huom\n"
+              = Error "[L1] the header must be 'sivu;pvm;mita;tulo;meno;tapa;kuitti;huom', not 'pvm;sivu;mita;tulo;meno;tapa;kuitti;huom'" @>

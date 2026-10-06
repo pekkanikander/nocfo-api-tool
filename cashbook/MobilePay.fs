@@ -60,7 +60,12 @@ module MobilePay =
           amount = row.Parse("Summa", "an amount (decimal point)", asAmount, 0M)
           kind   = kindOf kinds (row.String "Maksutapa") }
 
-    /// Reads a MobilePay Box export (I4–I7), keeping the first of the rows that repeat a transaction id (I5).
+    /// Reads a MobilePay Box export (I4–I7), keeping the first of the rows that repeat a transaction id (I5)
+    /// and leaving out every malformed row, reported with its file line (P9).
+    let readRows (kinds: MobilePayKinds) (text: string) : Result<Transaction list * string list, string> =
+        CsvReader.readRows "," header text (transaction kinds)
+        |> Result.map (fun (transactions, errors) -> List.distinctBy (fun transaction -> transaction.id) transactions, errors)
+
+    /// Every transaction of a MobilePay Box export, or every error in it.
     let read (kinds: MobilePayKinds) (text: string) : Result<Transaction list, string list> =
-        CsvReader.read "," header text (transaction kinds)
-        |> Result.map (List.distinctBy (fun transaction -> transaction.id))
+        CsvReader.strict (readRows kinds text)

@@ -10,14 +10,16 @@ open Nocfo.Tools.BlueprintJson
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 let private row (blueprintJson: string option) : DocumentCreatePayload =
-    { date        = None
-      description = None
-      is_draft    = None
-      ``type``    = None
-      blueprint   =
+    { date           = None
+      description    = None
+      is_draft       = None
+      is_flagged     = None
+      ``type``       = None
+      blueprint      =
         blueprintJson
         |> Option.map (fun s -> JsonDocument.Parse(s).RootElement.Clone())
-      tag_ids     = None }
+      attachment_ids = None
+      tag_ids        = None }
 
 let private blueprintOf (result: Result<DocumentCreatePayload, DomainError>) : JsonElement option =
     match result with

@@ -838,9 +838,10 @@ type AccountingReportJsonResponse =
 
 type AttachmentAnalysis =
     { values: list<AttachmentAnalysisValue>
-      analysis_data: System.Text.Json.JsonElement }
+      ///Workaround: the API returns null here although the spec models the field as required and non-null.
+      analysis_data: Option<System.Text.Json.JsonElement> }
     ///Creates an instance of AttachmentAnalysis with all optional fields initialized to None. The required fields are parameters of this function
-    static member Create (values: list<AttachmentAnalysisValue>, analysis_data: System.Text.Json.JsonElement): AttachmentAnalysis =
+    static member Create (values: list<AttachmentAnalysisValue>, analysis_data: Option<System.Text.Json.JsonElement>): AttachmentAnalysis =
         { values = values
           analysis_data = analysis_data }
 
@@ -888,8 +889,7 @@ type AttachmentInstance =
       blurhash_w: Option<int>
       blurhash_h: Option<int>
       is_deletable: bool
-      ///Workaround: file retrieve responses currently include AttachmentAnalysis.analysis_data as null even though the spec models it as required/non-null, so this field stays downgraded to avoid deserialization failures.
-      analysis_results: Option<string>
+      analysis_results: list<AttachmentAnalysis>
       ///* `PENDING` - Odottaa
       ///* `IN_PROGRESS` - Kesken
       ///* `COMPLETED` - Valmis
@@ -908,7 +908,7 @@ type AttachmentInstance =
                           blurhash_w: Option<int>,
                           blurhash_h: Option<int>,
                           is_deletable: bool,
-                          analysis_results: Option<string>): AttachmentInstance =
+                          analysis_results: list<AttachmentAnalysis>): AttachmentInstance =
         { id = id
           created_at = created_at
           updated_at = updated_at

@@ -174,7 +174,7 @@ needs no action.
 
 - `--profile <name>` / `-p <name>` selects a named profile from `~/.config/nocfo/config.toml`.
   Environment variables always override profile values when both are set.
-- `--dry-run` prints what mutations would be sent without executing them.
+- `--dryrun` prints what mutations would be sent without executing them.
 - `--fields` controls both which columns are emitted and which columns are read back.
   `id` is always required when executing updates or deletes.
 - On an update, a column the CSV carries is applied to every row it lists, so an empty cell
@@ -185,7 +185,7 @@ needs no action.
   `update contacts`, `update tags`; `delete accounts`, `delete contacts`, `delete documents`,
   `delete tags`; `create businesses`, `create accounts`, `create contacts`, `create tags`, and
   minimal `create documents`; plus `map accounts`, `balance`, `reconcile`, `statement`,
-  `cashbook seed`, `cashbook check`, `cashbook match` and `cashbook plan`.
+  `cashbook seed`, `cashbook check`, `cashbook match`, `cashbook plan` and `cashbook record`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,

@@ -163,6 +163,26 @@ let ``Documents are sorted by date, payment account and offset account (P1)`` ()
                           "2026-07-18;1930;3000;3,00;1;0;;[kassakirja] MobilePay/Kahvila 2026-07-18 (1)"
                           "2026-07-19;1900;3010;10,00;1;0;;[kassakirja] Kassa/Tanssit 2026-07-19 (1)" ] @>
 
+// ── Listing ───────────────────────────────────────────────────────────────────
+
+[<Fact>]
+let ``The listing names the document with the slash replaced and lists its rows in order, tab-separated (P12)`` () =
+    let _, lines, transactions = fixture "exact-multi"
+    let documents = Plan.build rules (Matching.run rules lines transactions)
+    test <@ List.map Listing.name documents
+              = [ "[kassakirja] Kassa-Tanssit 2026-07-18 (1).txt"; "[kassakirja] MobilePay-Tanssit 2026-07-18 (5).txt"
+                  "[kassakirja] MobilePay-Palvelumaksut 2026-07-18 (1).txt" ] @>
+    test <@ Listing.render documents.[0] = "[kassakirja] Kassa/Tanssit 2026-07-18 (1)\n2026-07-18\tsivu 1\tTanssit\t\t10,00\t0 kuittia\n" @>
+    test <@ Listing.render documents.[1]
+              = "[kassakirja] MobilePay/Tanssit 2026-07-18 (5)\n"
+                + "2026-07-18\tMobilePay 16:51\tTanssit\tE E\t7,70\t1005\n"
+                + "2026-07-18\tMobilePay 16:55\t\tD D\t10,00\t1004\n"
+                + "2026-07-18\tMobilePay 19:08\t\tC C\t14,00\t1003\n"
+                + "2026-07-18\tMobilePay 19:11\tTanssit🌱\tB B\t3,00\t1002\n"
+                + "2026-07-18\tMobilePay 19:14\tTanssit\tA A\t10,00\t1001\n" @>
+    test <@ Listing.render documents.[2]
+              = "[kassakirja] MobilePay/Palvelumaksut 2026-07-18 (1)\n2026-07-18\tMobilePay 19:12\t\tPalvelumaksu\t-2,00\tf-1001\n" @>
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 [<Fact>]

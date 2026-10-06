@@ -132,9 +132,24 @@ type DocumentCreatePayload =
   { date: string option
     description: string option
     is_draft: bool option
+    is_flagged: bool option
     ``type``: JsonElement option
     blueprint: JsonElement option
+    attachment_ids: int list option
     tag_ids: int list option }
+
+/// An entry of a document blueprint, its amount in euros kept `decimal` up to the wire; the generated
+/// `BlueprintEntryRequest` carries `float32`.
+type BlueprintEntry =
+  { account_id: int
+    amount: decimal }
+
+/// A document blueprint: the account on one side, the entries on the other.
+type Blueprint =
+  { debet_account_id: int option
+    debet_entries: BlueprintEntry list
+    credit_account_id: int option
+    credit_entries: BlueprintEntry list }
 
 [<CLIMutable>]
 type DocumentDelta =
@@ -151,6 +166,19 @@ type DocumentResult =
   | DocumentCreated  of DocumentFull
   | DocumentUpdated  of DocumentFull
   | DocumentDeleted  of int
+
+/// ------------------------------------------------------------
+/// Attachments
+/// ------------------------------------------------------------
+
+type AttachmentFull = NocfoApi.Types.AttachmentInstance
+
+/// A file for `POST /file_upload/`, its content base64-encoded; the attachment it becomes is attached to a
+/// document by its id.
+type FileUploadPayload =
+  { name: string
+    ``type``: string
+    file: string }
 
 /// ------------------------------------------------------------
 /// Contacts
@@ -484,6 +512,14 @@ module Ledger =
       context.ctx.http (Endpoints.ledgerReport context.key.slug) request
     |> AsyncResult.mapError DomainError.Http
 
+module Attachment =
+  /// The file stored as an attachment, to be attached to a document by its id. Unlike the commands it does
+  /// not honour `dryRun`: the caller must not get here with it set, since no attachment id can be made up.
+  let upload (context: BusinessContext) (payload: FileUploadPayload) : Async<Result<AttachmentFull, DomainError>> =
+    Http.postJson<FileUploadPayload, AttachmentFull>
+      context.ctx.http (Endpoints.fileUpload context.key.slug) payload
+    |> AsyncResult.mapError DomainError.Http
+
 ///
 /// Document module operations
 ///
@@ -596,6 +632,14 @@ module Streams =
     Streams.streamPaginated<PaginatedDocumentListList, DocumentFull>
        context.ctx.http
        (fun page -> Endpoints.documentsBySlugPage context.key.slug page)
+    |> toDomain id
+
+  /// The document rows dated within the period, both ends inclusive.
+  let streamDocumentRowsDated (context: BusinessContext) (dateFrom: string) (dateTo: string)
+    : AsyncSeq<Result<DocumentRow, DomainError>> =
+    Streams.streamPaginated<PaginatedDocumentListList, DocumentFull>
+       context.ctx.http
+       (fun page -> Endpoints.documentsBySlugDatedPage context.key.slug dateFrom dateTo page)
     |> toDomain id
 
   let streamContactRows (context: BusinessContext) : AsyncSeq<Result<ContactRow, DomainError>> =

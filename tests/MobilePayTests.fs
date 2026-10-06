@@ -57,3 +57,11 @@ let ``A malformed date or amount is located`` () =
     test <@ MobilePay.read kinds (header + badDate + badAmount)
               = Error [ "[L2] 'Päivämäärä' must be a date and time (dd/MM/yyyy HH:mm), not '2026-07-18 19:14'"
                         "[L3] 'Summa' must be an amount (decimal point), not '10,00'" ] @>
+
+[<Fact>]
+let ``Read leniently, a malformed row is left out and located, the others kept and deduplicated (P9, I5)`` () =
+    let text = header + row "first" "10" "EUR" "Maksa Lippaaseen" "1001" + row "x" "10" "SEK" "Maksa Lippaaseen" "1002"
+               + row "again" "10" "EUR" "Maksa Lippaaseen" "1001"
+    test <@ Result.map (fun (transactions, errors) -> List.map (fun (transaction: Transaction) -> transaction.text) transactions, errors)
+                       (MobilePay.readRows kinds text)
+              = Ok ([ "first" ], [ "[L3] 'Valuutta' must be EUR, not 'SEK'" ]) @>
