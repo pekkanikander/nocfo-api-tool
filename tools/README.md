@@ -135,6 +135,8 @@ Mutating commands:
 | `cashbook plan -k <cashbook.csv> -m <mobilepay.csv> -r <rules.toml> [--match <match.csv>] [--from <date>] [--to <date>]` | Classifies and coalesces the posted items into the documents to record and writes `plan.csv`, each document with its reason tags | Local files only, no API; matches afresh unless `--match` gives a `match.csv`, whose tiers and transaction ids are taken as given; the book-only and possible-mp lines and the tagged document counts go to stderr |
 | `cashbook record -b <id> -k <cashbook.csv> -m <mobilepay.csv> -r <rules.toml> [--match <match.csv>] [--from <date>] [--to <date>] [--force]` | Matches, plans and records the documents as drafts, each with a text listing of its rows attached and, when it carries reason tags, flagged and tagged with them | Refuses on a rules account missing from the chart and, without `--force`, on a malformed row or a MobilePay-marked line matched to nothing (exit 65); `--force` drops the malformed rows and leaves those lines unrecorded; a document already recorded with the same date, accounts, amount and description is skipped, and the marker drafts no planned document claims are listed on stderr; `-n` prints `plan.csv` instead and exits as the upload would |
 
+The cash-book verbs, their inputs and the rules file are described in `cashbook/README.md`.
+
 ### Reconciliation sources
 
 `--left` and `--right` each take one of:

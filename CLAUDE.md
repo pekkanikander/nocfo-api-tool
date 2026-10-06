@@ -20,7 +20,7 @@ api/openapi.json         NoCFO OpenAPI spec (source of truth for regeneration)
 hawaii-client/           The library (used by tools/)
   generated/             Hawaii-generated code — do NOT hand-edit
   src/                   Hand-written domain, streaming, HTTP, CSV logic
-cashbook/                Cash-book library (pure; no NoCFO dependency; used by tools/)
+cashbook/                Cash-book library (pure; no NoCFO dependency; used by tools/); README.md is the user guide
 tools/                   CLI exe project `nocfo` (depends on hawaii-client and cashbook)
 tests/                   xUnit unit tests — pure, no network
 tests-online/            Bash regression tests against api-tst (not part of `dotnet test`)

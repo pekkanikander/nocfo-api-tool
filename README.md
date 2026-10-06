@@ -13,6 +13,7 @@ An F# CLI tool and client library for the [NoCFO](https://nocfo.io/) Finnish acc
 - `hawaii-client/` – F# library using Hawaii-generated types, lazy `AsyncSeq` streams, and a thin domain layer. Start here.
 - `api/openapi.json` – The upstream NoCFO OpenAPI document used for generation.
 - `tools/` – CSV-first CLI ("nocfo") built on top of the Hawaii F# client library; see `tools/README.md`.
+- `cashbook/` – Cash-book and MobilePay Box posting library behind the `cashbook` verbs; see `cashbook/README.md`.
 - `tests/` – xUnit unit tests for the pure library modules (no network access needed).
 - `tests-online/` – Shell-based online regression tests for command line commands against `api-tst`.
 - `requests/` – Raw HTTP checks (VS Code REST client format) for manual smoke testing.
@@ -189,7 +190,7 @@ needs no action.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,
-and the internal architecture.
+and the internal architecture, and `cashbook/README.md` for the cash-book workflow.
 
 ## Online Regression Suite
 
