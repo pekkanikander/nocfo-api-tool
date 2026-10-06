@@ -41,12 +41,12 @@ Last edited 2026-10-06.
 | --- | --- | --- |
 | I1 | Cash book CSV: `sivu;pvm;mita;tulo;meno;tapa;kuitti;huom`, `;` separated, decimal comma, UTF-8 with or without BOM. `pvm` is ISO. Exactly one of `tulo`/`meno` is non-empty. | I |
 | I2 | `tapa` is normalised: `MP`, `MP?` → MobilePay; `KÄT`, `KT`, `KÄ` → cash; empty → unmarked. Anything else is a CLI-side row error, not a NoCFO concern: it stops the run before any matching or posting; `--force` drops the offending rows instead and continues with the rest (P9). | P |
-| I3 | `kuitti` is a receipt count (integer) or empty. `huom` is free text: never written to a generated CSV (P6), carried into NoCFO as part of its row's rendering in the document (P10). | P |
+| I3 | `kuitti` is a receipt count (integer) or empty. `huom` is free text: never written to a generated CSV (P6), carried into NoCFO in the attached listing of the document its line posts into (P10, P12). | P |
 | I4 | MobilePay export CSV: `Päivämäärä,Nimi,Tyyppi,Numero,Viesti,Summa,Valuutta,Maksutapa,Tapahtumatunnus`; date `dd/MM/yyyy HH:mm` local time; decimal point. The XLSX is converted outside the tool for now. | I |
 | I5 | `Tapahtumatunnus` is the transaction identity. Several exports may overlap; transactions are de-duplicated on it. | I |
 | I6 | `Maksutapa` values are enumerated in `rules.toml` `[mobilepay]`: `payment_in` (`Maksa Lippaaseen`), `fee` (`Palvelumaksu`), `expense` (paid from MobilePay), `payout` (to the bank, already booked from the bank feed, never posted). A value in no list is still posted, as its own document in K7's shape, flagged and tagged `unknown-type` and not also `unclassified`, since it never enters classification: the money is real and belongs in NoCFO whatever its type turns out to be. | P |
 | I7 | Only EUR. A non-EUR row is a CLI-side row error, for the same reason as I2: the posted amount would be wrong outright, not merely unclassified. `--force` drops the row (P9). | P |
-| I8 | `Nimi` is read and, for a transaction that posts, carried to NoCFO as part of its row's rendering in the document (P11); it is never written to `match.csv` or `plan.csv` (P6). | P |
+| I8 | `Nimi` is read and, for a transaction that posts, carried to NoCFO in the attached listing of its document (P11, P12); it is never written to `match.csv` or `plan.csv` (P6). | P |
 
 ## 2. Classification (offset account)
 
@@ -60,7 +60,7 @@ Every posted line needs an offset account. Signals, in priority order:
 | K4 | Day-majority: an MP transaction still unclassified takes the account that at least `classification.majority_min` other MP transactions on the same day were classified to, if that account holds a strict majority of that day's classified MP transactions. | I |
 | K5 | Same-amount: an MP transaction still unclassified that has the same amount that at least `classification.same_amount_min` other MP transactions on the same or adjacent day have, is classified like the majority of those having the same amount. | I |
 | K6 | Domain-specific rules need no code. The earlier cafe rule is now a K1 rule using predicates already defined there (`no_text`, `max_amount`, `min_per_day`), placed last in the income list: an unmarked transaction of at most `max_amount` on a day on which the preceding rules already put at least `min_per_day` lines on the cafe account goes there too. | I |
-| K7 | Otherwise the item is still recorded, flagged and tagged `unclassified` (P7), one document on its own, never coalesced, with `?` for the offset name in its description (C5); the bookkeeper completes it in NoCFO. *Design open (2026-10-06):* the API refuses a blueprint with a payment account and no offset entries (`Kredit-viennit puuttuvat`) and an unbalanced one; NoCFO's own bank-import drafts carry their amount in the read-only `import_data`. Either (a) the item is posted balanced against a clearing account named in `rules.toml` (`[accounts].unclassified`), so the bookkeeper changes one account and the payment account's balance is right at once, or (b) it is posted as an empty draft, no entries at all (accepted), the amount and accounts only in its description, so the bookkeeper enters the whole posting by hand. (a) is recommended; it reverses the 2026-09-29 decision against a suspense account, taken on the false premise that an offset-less draft is possible. | P |
+| K7 | Otherwise the item is still recorded, posted balanced against the clearing account named `[accounts].unclassified` in `rules.toml`, flagged and tagged `unclassified` (P7); the bookkeeper changes the one account in NoCFO, and the payment account's balance is right from the start. It is one document on its own, never coalesced, with `?` for the offset name in its description (C5), as for every document whose offset is the clearing account. The offset-less draft that NoCFO's own bank imports show is not available: the API refuses a blueprint with a payment account and no offset entries (`Kredit-viennit puuttuvat`) and an unbalanced one, and those drafts carry their amount in the read-only `import_data`. | P |
 | K8 | Fees classify to `[accounts].fees` unconditionally. | I |
 
 ## 3. Matching (book ↔ MobilePay)
@@ -94,14 +94,9 @@ income lines, MP expenses for expense lines) within the time window, which runs 
 | C4 | Expenses paid from the till are never coalesced: one document per book line, receipt count in the description. | I |
 | C5 | Description: `<marker> <payment name>/<offset name> <date>[–<last date>] (<n>)`; for a till expense `<marker> Kassa/<offset name> <date> <mita> (<k> kuittia)`. The marker is `[posting].marker`, names come from `rules.toml`. | I |
 
-Whenever rows are coalesced, the NoCFO document shall list the original rows, in human-readable form.
-*Design open (2026-10-06):* a document has no free-text field beyond its 256-character `description` (enforced).
-Verified on api-tst: (a) a blueprint may carry one entry per row, each with its own 256-character `description`;
-entries of the same account are kept apart and shown as separate rows, with no extra request. (b) A file (CSV or
-text, uploaded as multipart or as base64 JSON) can be attached to the document at creation through
-`attachment_ids`, one extra request per document; NoCFO runs its file analysis on every upload. (a) is
-recommended: the rows are visible in the document itself, next to the amounts they explain; (b) would make a
-coalesced document a self-contained voucher, at the price of a file to open and a second request.
+Every document lists its original rows, in human-readable form, in an attached text file (P12): a coalesced
+document is then a self-contained voucher, and `huom` and `Nimi` reach NoCFO for a single-row document too
+(P10, P11).
 
 The paper book is the daily record the law requires for cash; it is archived for six years, so
 the summary posting is a permitted combined entry.
@@ -111,7 +106,7 @@ the summary posting is a permitted combined entry.
 | id | rule | status |
 | --- | --- | --- |
 | P1 | `plan.csv` is the reviewable intermediate: `date;payment_account;offset_account;amount;lines;receipts;tags;description`, sorted by date, payment account, offset account. `amount` is the change of the payment account (income positive, expenses and fees negative); `receipts` is the number of paper receipts expected (sum of `kuitti`); `tags` is the `+`-joined reason tags of its lines (empty when none), the same tags the document carries in NoCFO (P7). `record` renders the documents from it deterministically, every document a draft; there is no intermediate documents CSV. | P |
-| P2 | Income: `debet_account_id` = payment account, `credit_entries` on the offset account. Expense: `credit_account_id` = the paying account (cash or MobilePay), `debet_entries` on the expense account. Fee: as an expense from MobilePay on the fee account. One entry per source row, or one in all, as section 4 decides. Entry amounts are euros with two decimals (verified on api-tst 2026-10-06; the spec's "smallest currency unit" is wrong), written from `decimal` as JSON numbers, never through `float32`; VAT fields are left to the API's defaults (`Veroton`). | P |
+| P2 | Income: `debet_account_id` = payment account, `credit_entries` on the offset account. Expense: `credit_account_id` = the paying account (cash or MobilePay), `debet_entries` on the expense account. Fee: as an expense from MobilePay on the fee account. One entry on each side; the rows are in the attached listing (P12). Entry amounts are euros with two decimals (verified on api-tst 2026-10-06; the spec's "smallest currency unit" is wrong), written from `decimal` as JSON numbers, never through `float32`; VAT fields are left to the API's defaults (`Veroton`). | P |
 | P3 | Account numbers in `rules.toml` are resolved to ids once per run through the accounts list of the business. | P |
 | P4 | *Withdrawn: every document is a draft, see P1.* | — |
 | P5 | Idempotency: recording an unchanged plan again changes nothing in NoCFO; when the plan changes, the documents in NoCFO change with it. Overlapping exports are handled by I5. Drafts and finalised documents are told apart, and nothing is deleted. First version (agreed 2026-10-06), for the run repeated after a correction: `record` lists the business's documents dated within the plan's range (`date_from`/`date_to`) whose description starts with the marker; a planned document equal to one of them in date, payment account, offset account, amount and description is not created again, the rest are created, and the marker drafts no planned document claimed are listed on stderr; nothing is modified or deleted, a finalised document least of all. *Still open:* how a changed row is reconciled with the document it once produced. | P |
@@ -119,8 +114,9 @@ the summary posting is a permitted combined entry.
 | P7 | A document whose lines carry any reason tag is posted flagged (`is_flagged = true`) and carrying those tags (`tag_ids`), one per distinct reason: `flagged` (K1), `unclassified` (K7), `unknown-type` (I6), `assumed-cash` (M9), `ambiguous` (M8), `unmarked-expense` (M10), `mp-expense-unbooked` (M11). Tag names are the bare reason codes, found or created once per run in the target business; a run never creates the same tag twice, and the API refuses a duplicate name anyway (verified). `possible-mp` and `book-only` are never tags: they carry no document to flag (M7, M6). | P |
 | P8 | `record` is the one command for ordinary use: it matches, plans and posts in a single run against a business. With `--dry-run` it prints `plan.csv` instead of posting. `match` and `plan` remain as offline previews needing no network; `--match` on either takes a `match.csv` as given instead of matching afresh, for the rare case the automatic match needs correcting by hand. | P |
 | P9 | Exit status and `--force`: a row the tool itself cannot resolve (I2, I7) is an input error like any other malformed row (a bad date, a bad amount); an MP-marked book line MobilePay does not cover (M6) is a data inconsistency with no document to carry it. Either kind stops the run with exit status 65 (`EX_DATAERR`) and blocks the upload by default; `--force` drops just the offending rows, each named on stderr — M6's stay unposted exactly as they already are — and uploads the rest. Nothing resolved instead by flagging and tagging a draft in NoCFO (K1, K7, I6, M8, M9, M10, M11) ever affects the exit status, since that work happens there, not at the CLI; nor does `possible-mp` (M7), which needs no flag at all since the amount posted is already correct. A malformed header, a malformed rules file, a missing V2 account, or a malformed or inconsistent `--match` file stops the run regardless of `--force`: there is no single row to drop and no safe default to fall back on. | P |
-| P10 | A book line's `huom`, when present, reaches NoCFO as part of its row's rendering in the document it posts into (section 4). A MobilePay transaction has no equivalent field. | P |
-| P11 | A MobilePay transaction's `Nimi`, when present, reaches NoCFO the same way: part of its row's rendering in the document (section 4, P10). A book line has no equivalent field. | P |
+| P10 | A book line's `huom`, when present, reaches NoCFO on its row's line in the attached listing of the document it posts into (P12). A MobilePay transaction has no equivalent field. | P |
+| P11 | A MobilePay transaction's `Nimi`, when present, reaches NoCFO the same way: on its row's line in the attached listing (P12). A book line has no equivalent field. | P |
+| P12 | The listing: a UTF-8 plain-text file attached to every document at creation (`POST /file_upload/` with base64 content, then `attachment_ids`), named after the description with `/` replaced by `-` and `.txt` appended. Its first line is the description; then one line per source row in the document's order, giving the date, the source (book page, or MobilePay with the time of day), the text, the remark or name, the signed amount with a decimal comma, and the receipt count or the transaction id. A document has no free-text field beyond its 256-character `description`, which is why a file carries the rows; one entry per row, verified to work as well, was passed over because a document with one entry per side is quicker to accept and to correct. | P |
 
 ## 6. Reports
 
@@ -136,8 +132,8 @@ the summary posting is a permitted combined entry.
 | id | rule | status |
 | --- | --- | --- |
 | V1 | The file is parsed strictly: an unknown table or key is an error, so a mistyped key cannot silently disable a rule. | I |
-| V2 | Every account number in the file, payment and fee accounts and rule accounts alike, must exist in the business. `cashbook check` verifies this against the live accounts list and warns where the NoCFO account name differs from the `name` in the file. `record` runs the same check first and refuses on any missing account. | I |
-| V3 | `cashbook seed` writes a rules file skeleton from the live accounts list: the payment and fee accounts left blank, and one commented-out rule stub per revenue and expense account with empty keywords, in account-number order. Keyword inference from examples is not algorithmic; keywords are written by hand, or later derived from corrected `match.csv`/`plan.csv` files. | I |
+| V2 | Every account number in the file, payment, fee and clearing accounts and rule accounts alike, must exist in the business. `cashbook check` verifies this against the live accounts list and warns where the NoCFO account name differs from the `name` in the file. `record` runs the same check first and refuses on any missing account. | I |
+| V3 | `cashbook seed` writes a rules file skeleton from the live accounts list: the payment, fee and clearing accounts left blank, and one commented-out rule stub per revenue and expense account with empty keywords, in account-number order. Keyword inference from examples is not algorithmic; keywords are written by hand, or later derived from corrected `match.csv`/`plan.csv` files. | I |
 
 ## 8. CLI surface (proposed)
 
@@ -154,8 +150,9 @@ the one command for ordinary use (P8): it matches, plans and posts in a single r
 instead of posting when `--dry-run` is given. Like `plan`, it re-runs the matching unless `--match` supplies
 a (possibly hand-corrected) `match.csv`; the tiers and `mp_ids` in it are taken as given. A book line is
 posted only at tier `cash`, so a cash-marked line given an M-tier by hand becomes a hint like an MP-marked
-one and its money is not posted twice. Exit status and `--force` are P9. `record` uses the existing
-profile and verbose flags.
+one and its money is not posted twice. Exit status and `--force` are P9: `match` and `plan` end with the R4
+summary as well but exit 0 on anything they could read, since the summary and the CSV are their whole point;
+`record --dry-run` exits as the upload would have. `record` uses the existing profile and verbose flags.
 
 ## 9. Open questions
 
@@ -185,8 +182,11 @@ profile and verbose flags.
    → Done: `days_before`/`days_after`, see the section 3 intro.
 8. K7's shape now that an offset-less draft is impossible: a clearing account (recommended) or an
    empty draft; see K7.
+   Owner (2026-10-06): the clearing account. → Done: `[accounts].unclassified` (K7, I6, V2, V3).
 9. The per-row listing of a coalesced document: one entry per row (recommended) or an attached
    file; see section 4.
+   Owner (2026-10-06): the attached file, as less work when accepting the drafts and still a full
+   record in NoCFO. → Done: P12, for every document.
 
 ## 10. Decision log
 
@@ -229,3 +229,5 @@ profile and verbose flags.
 - 2026-10-06 — api-tst probed: entry amounts are euros (question 2 closed); an offset-less or unbalanced blueprint is refused and an empty one accepted (question 4 closed, K7 reopened as question 8); `is_flagged`, `tag_ids` and `attachment_ids` are honoured on create, a duplicate tag name is refused, both upload forms work, and `description` is capped at 256 characters, so a coalesced document's per-row listing goes into its entries or into an attachment (question 9).
 - 2026-10-06 — `tags` in `plan.csv` are `+`-joined like `mp_ids` (P1); a skipped MP-marked line keeps the tier `book-only` with the note `outside-export` (M6, R1); an ambiguous line's `mp_ids` list the contested transactions (M8, R1); a document is flagged exactly when it is tagged (C1, C2); `record` builds the documents straight from the plan, no documents CSV (P1); `--force` drops any malformed row and the blocking exit status is 65 (P9); the stderr summary names each `book-only` and `possible-mp` line and counts tagged documents (R4).
 - 2026-10-06 — P5 first version agreed: a planned document equal in date, accounts, amount and description to an existing marker document is not created again; marker drafts left unclaimed are listed; nothing is modified or deleted.
+- 2026-10-06 — Unclassified and unknown-type items post against a clearing account, `[accounts].unclassified`, flagged and tagged; the 2026-09-29 decision against a suspense account is reversed, the offset-less draft being impossible (K7, I6, question 8).
+- 2026-10-06 — Every document carries its rows as an attached text file, named after its description (P12); one entry per row passed over (question 9). `match` and `plan` print the R4 summary but always exit 0 on readable input; the P9 exit status is `record`'s (section 8).
