@@ -20,7 +20,8 @@ api/openapi.json         NoCFO OpenAPI spec (source of truth for regeneration)
 hawaii-client/           The library (used by tools/)
   generated/             Hawaii-generated code — do NOT hand-edit
   src/                   Hand-written domain, streaming, HTTP, CSV logic
-tools/                   CLI exe project `nocfo` (depends on hawaii-client)
+cashbook/                Cash-book library (pure; no NoCFO dependency; used by tools/); README.md is the user guide
+tools/                   CLI exe project `nocfo` (depends on hawaii-client and cashbook)
 tests/                   xUnit unit tests — pure, no network
 tests-online/            Bash regression tests against api-tst (not part of `dotnet test`)
 requests/                VS Code REST client files for manual HTTP testing
@@ -121,27 +122,32 @@ dotnet ./vendor/Hawaii/src/bin/Release/net10.0/Hawaii.dll \
 dotnet build vendor/Hawaii/src/Hawaii.fsproj -c Release
 ```
 
-`nocfo-api-hawaii.json` carries an `overrideSchema` block that patches three upstream spec bugs
-(`DocumentList.period`, `DocumentInstance.period`, `AttachmentInstance.analysis_results`).
+`nocfo-api-hawaii.json` carries an `overrideSchema` block that patches upstream spec bugs
+(`DocumentList.period`, `DocumentInstance.period`, `AttachmentAnalysis.analysis_data`).
 Keep it when refreshing the spec.
 
 ---
 
 ## CLI Surface
 
-Global flags: `--in/-i`, `--out/-o`, `--profile/-p`, `--dry-run/-n`, `--verbose/-v`.
+Global flags: `--in/-i`, `--out/-o`, `--profile/-p`, `--dryrun/-n`, `--verbose/-v`.
 Input defaults to stdin, output to stdout; errors and HTTP traces go to stderr.
 
 | verb | entities |
 | --- | --- |
-| `list` | businesses, accounts, contacts, documents |
-| `update` | businesses, accounts, contacts, documents |
-| `delete` | accounts, contacts, documents |
-| `create` | businesses, accounts, contacts, documents |
+| `list` | businesses, accounts, contacts, documents, tags, files |
+| `update` | businesses, accounts, contacts, documents, tags |
+| `delete` | accounts, contacts, documents, tags, files |
+| `create` | businesses, accounts, contacts, documents, tags |
 | `map` | accounts (source → target env, keyed on account number) |
 | `balance` | rolling balance of the selected accounts over a period (`--daily` for closing balances) |
 | `reconcile` | daily balances of two sources compared day by day |
 | `statement` | transactions of a TITO bank statement as CSV (local file, no API) |
+| `cashbook seed` | `rules.toml` skeleton from the chart of accounts: payment, fee and clearing accounts blank, one commented-out rule stub per revenue and expense account |
+| `cashbook check` | a `rules.toml` parsed strictly and its account numbers checked against the chart of accounts: a missing account is an error, a name that differs from NoCFO's a warning |
+| `cashbook match` | the cash book matched against a MobilePay Box export under the `[matching]` weights of a `rules.toml`, written as `match.csv` (local files, no API; `--from`/`--to` restrict both inputs) |
+| `cashbook plan` | the documents to record from the cash book and a MobilePay Box export: the posted items classified under `[classification]` and coalesced under `[coalesce]` of a `rules.toml`, written as `plan.csv` with the reason tags of each document; `--match` takes a `match.csv` as given (local files, no API) |
+| `cashbook record` | the documents of `cashbook plan` recorded as drafts, each with a text listing of its rows attached and, when it carries reason tags, flagged and tagged with them; refuses on a `rules.toml` account missing from the chart and, without `--force`, on a malformed row or a MobilePay-marked line matched to nothing; a document already recorded with the same date, accounts, amount and description is skipped, and the marker drafts no planned document claims are listed on stderr; under `-n` prints `plan.csv` and exits as the upload would |
 
 ```bash
 dotnet run --project tools -- list businesses --fields "id,name,slug"
@@ -179,15 +185,22 @@ F# requires declaration-before-use ordering:
 10. `Tito.fs` — Reader for the Finnish machine-readable bank statement (TITO, `.nda`)
 11. `Reports.fs` — Rolling balance, daily reconciliation, and the sources they read
 
-`tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Program.fs`.
+`tools/`: `Config.fs` → `Tools.fs` → `Arguments.fs` → `BlueprintJson.fs` → `Record.fs` (the NoCFO document a planned
+document becomes) → `Program.fs`.
+
+`cashbook/`: `Seed.fs` → `TomlReader.fs` (strict TOML-to-record reading, no domain knowledge) → `Rules.fs`
+→ `CsvReader.fs` (strict CSV-to-record reading, no domain knowledge) → `Period.fs` → `CashBook.fs` (the cash book)
+→ `MobilePay.fs` (the Box export) → `Matching.fs` → `Classification.fs` (K1–K5) → `Plan.fs` (the documents)
+→ `Reports.fs` (`match.csv`, `plan.csv`, the listing attached to a recorded document and the stderr summary)
+(namespace `Nocfo.Cashbook`; must not reference `hawaii-client`).
 
 ---
 
 ## Known Limitations & TODOs (as of August 2026)
 
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
-- API coverage: businesses, accounts, contacts, documents, and the ledger report. Not covered:
-  entries, periods, other reports, VAT, tags, files, invoicing. See `ROADMAP.md` Phase 5.
+- API coverage: businesses, accounts, contacts, documents, tags, and the ledger report. Not covered:
+  entries, periods, other reports, VAT, files beyond the upload, the list and the delete, invoicing. See `ROADMAP.md` Phase 5.
 
 ---
 
@@ -215,7 +228,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 114 tests
+dotnet test tests     # 230 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).
@@ -230,6 +243,14 @@ No network access — HTTP is faked with a stub `HttpMessageHandler` (see `Entit
 - `BalanceTests.fs` — `Balance.rows` / `dailyClosing` over a hand-built ledger response
 - `ReconcileTests.fs` — `Reconcile.daily` carry-forward, tolerance, and ordering
 - `BlueprintJsonTests.fs` — document blueprint account-ID remapping
+- `SeedTests.fs` — `Seed.render`: the `rules.toml` skeleton, parsed with Tomlyn before and after uncommenting the stubs
+- `RulesTests.fs` — `Rules.parse` on the fixture `rules.toml` and on malformed snippets, and `Rules.check` against a hand-built chart
+- `CashBookTests.fs` — `CashBook.read` and `readRows`: the cash-book columns, `tapa` normalisation, the located errors, and the lenient read that drops the malformed lines
+- `MobilePayTests.fs` — `MobilePay.read` and `readRows`: the export columns, kinds by `Maksutapa`, currency, and duplicate ids
+- `MatchingTests.fs` — the `tests/fixtures/cashbook/*/match.csv` golden files, hand-built tier and assignment cases, and `Period`
+- `ClassificationTests.fs` — `Classification.classify`: each rule predicate, rule order, and the day-majority and same-amount fallbacks
+- `PlanTests.fs` — the `tests/fixtures/cashbook/*/plan.csv` golden files, hand-built posting, coalescing and ordering cases, the attached listing, the stderr summary, and `MatchReport.read`
+- `RecordTests.fs` — `Record.blueprint`, `payload`, `attachment` and `recorded`: the income and expense blueprint shapes, the draft payload, the listing upload, and equality with a listed document's blueprint as the API gives it back
 
 **Unquote + `inline` functions:** Unquote cannot dynamically invoke `inline` SRTP
 functions via quotation reflection. Pre-compute the result into a `let result = ...`
@@ -259,5 +280,3 @@ Both `config/config.toml` and `config/fixture.env` are gitignored and must be cr
   "Architectural Direction" section of `ROADMAP.md`. `paginateByPageSRTP` is the reference example.
 - Amounts from the API are `float32`/`double`. Convert to `decimal` before any accumulation or
   comparison — never fold money in floating point.
-- Do not commit anything under `tmp/`: it is *not* gitignored and currently holds a real bank
-  statement with personal data.

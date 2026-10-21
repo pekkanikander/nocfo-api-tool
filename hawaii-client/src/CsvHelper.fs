@@ -32,6 +32,17 @@ let private isFSharpList (t: Type) =
 
 let private listInner (t: Type) = t.GetGenericArguments().[0]
 
+let private joinSeq (xs: System.Collections.IEnumerable) =
+    xs
+    |> Seq.cast<obj>
+    |> Seq.map (function
+        | null -> ""
+        | :? IFormattable as f -> f.ToString(null, CultureInfo.InvariantCulture)
+        | :? string as s -> s
+        | :? JsonElement as e -> elementToCompactString e
+        | v -> serializeUntyped v)
+    |> String.concat ";"
+
 // --- Converters ---
 
 type OptionConverter<'a>() =
@@ -46,6 +57,7 @@ type OptionConverter<'a>() =
             | :? IFormattable as f -> f.ToString(null, CultureInfo.InvariantCulture)
             | :? string as s -> s
             | :? JsonElement as e -> elementToCompactString e
+            | :? System.Collections.IEnumerable as xs -> joinSeq xs
             | v -> v.ToString()
         else ""
 
@@ -53,16 +65,7 @@ type SeqJoinConverter<'a>() =
     inherit DefaultTypeConverter()
     override _.ConvertToString(value, memberMapData, row) =
         match value with
-        | :? System.Collections.IEnumerable as xs ->
-            xs
-            |> Seq.cast<obj>
-            |> Seq.map (function
-                | null -> ""
-                | :? IFormattable as f -> f.ToString(null, CultureInfo.InvariantCulture)
-                | :? string as s -> s
-                | :? JsonElement as e -> elementToCompactString e
-                | v -> serializeUntyped v)
-            |> String.concat ";"
+        | :? System.Collections.IEnumerable as xs -> joinSeq xs
         | _ -> ""
 
 type JsonElementCompactConverter() =

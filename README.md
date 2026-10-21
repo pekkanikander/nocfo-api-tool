@@ -13,6 +13,7 @@ An F# CLI tool and client library for the [NoCFO](https://nocfo.io/) Finnish acc
 - `hawaii-client/` – F# library using Hawaii-generated types, lazy `AsyncSeq` streams, and a thin domain layer. Start here.
 - `api/openapi.json` – The upstream NoCFO OpenAPI document used for generation.
 - `tools/` – CSV-first CLI ("nocfo") built on top of the Hawaii F# client library; see `tools/README.md`.
+- `cashbook/` – Cash-book and MobilePay Box posting library behind the `cashbook` verbs; see `cashbook/README.md`.
 - `tests/` – xUnit unit tests for the pure library modules (no network access needed).
 - `tests-online/` – Shell-based online regression tests for command line commands against `api-tst`.
 - `requests/` – Raw HTTP checks (VS Code REST client format) for manual smoke testing.
@@ -174,7 +175,7 @@ needs no action.
 
 - `--profile <name>` / `-p <name>` selects a named profile from `~/.config/nocfo/config.toml`.
   Environment variables always override profile values when both are set.
-- `--dry-run` prints what mutations would be sent without executing them.
+- `--dryrun` prints what mutations would be sent without executing them.
 - `--fields` controls both which columns are emitted and which columns are read back.
   `id` is always required when executing updates or deletes.
 - On an update, a column the CSV carries is applied to every row it lists, so an empty cell
@@ -182,13 +183,14 @@ needs no action.
 - Output defaults to stdout and input defaults to stdin;
   `--out`/`--in` override those streams without shell redirection.
 - Currently implemented verbs include all `list` commands; `update businesses`, `update accounts`,
-  `update contacts`; `delete accounts`, `delete contacts`, `delete documents`; `create businesses`,
-  `create accounts`, `create contacts`, and minimal `create documents`; plus `map accounts`,
-  `balance`, `reconcile` and `statement`.
+  `update contacts`, `update tags`; `delete accounts`, `delete contacts`, `delete documents`,
+  `delete tags`, `delete files`; `create businesses`, `create accounts`, `create contacts`, `create tags`, and
+  minimal `create documents`; plus `map accounts`, `balance`, `reconcile`, `statement`,
+  `cashbook seed`, `cashbook check`, `cashbook match`, `cashbook plan` and `cashbook record`.
 - Errors and HTTP traces go to stderr so you can keep piping stdout to files.
 
 See `tools/README.md` for a deeper dive into configuration, CSV expectations,
-and the internal architecture.
+and the internal architecture, and `cashbook/README.md` for the cash-book workflow.
 
 ## Online Regression Suite
 

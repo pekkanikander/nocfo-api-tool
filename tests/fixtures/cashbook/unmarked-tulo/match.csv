@@ -1,0 +1,8 @@
+book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note
+2;2026-09-08;Alkufest;-13,00;KÄT;cash;;;
+2;2026-09-10;Alkufest;-93,43;;cash;;;unmarked-expense
+2;2026-09-11;Kahvila;3,00;KÄT;cash;;;
+2;2026-09-11;Pääsymaksu;10,00;KÄT;cash;;;possible-mp: 2004
+2;2026-09-11;Kahvila;11,00;;M1;2001;11,00;
+2;2026-09-11;Lahjoitus;1,00;;M1;2002;1,00;
+2;2026-09-11;Kahvila;7,00;;M1;2003;7,00;

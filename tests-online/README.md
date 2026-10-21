@@ -15,7 +15,10 @@ selected through `NOCFO_TOOL_CONFIG_HOME`.
 4. Replace the placeholders in `tests-online/config/fixture.env`: `TEST_BUSINESS_SLUG`
    (a stable test business slug), `TEST_ACCOUNT_ID` (for the mutation tests), and
    `TEST_LEDGER_ACCOUNT`/`TEST_LEDGER_FROM`/`TEST_LEDGER_TO` (an account and a date
-   range with ledger entries, for the balance and reconcile cases).
+   range with ledger entries, for the balance and reconcile cases), and the five
+   `TEST_CASHBOOK_*` account numbers (a cash, a MobilePay, a fee and a clearing account
+   from the balance sheet and one revenue account, for the `cashbook record` case, which
+   posts three drafts against them and deletes them and their listings again).
 5. Ensure `bash` and `python3` are available.
 
 The real `config.toml` and `fixture.env` are ignored by git.

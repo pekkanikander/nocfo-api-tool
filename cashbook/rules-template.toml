@@ -1,0 +1,53 @@
+[accounts]
+# The asset and liability accounts of the business, to choose the cash and mobilepay accounts and the
+# clearing account the unclassified items post against (K7) from:
+{{candidates}}
+cash           = { number = "", name = "" }
+mobilepay      = { number = "", name = "" }
+fees           = { number = "", name = "" }
+unclassified   = { number = "", name = "" }
+
+[mobilepay]
+# Maksutapa values, by meaning (I6). Expense and payout values are still unknown.
+payment_in = ["Maksa Lippaaseen"]
+fee        = ["Palvelumaksu"]
+expense    = []
+payout     = []
+
+[matching]
+days_before = 1
+days_after  = 3
+max_subset  = 8
+tolerance   = 0.50
+# M8 cost weights: lower total cost wins
+weight_unmatched     = 100
+weight_near_miss     = 10
+weight_date_distance = 1
+weight_subset_size   = 0.1
+weight_coherence     = -5
+
+[classification]
+majority_min    = 3      # K4
+same_amount_min = 3      # K5
+
+# A rule hits when every predicate it carries holds: keywords (case-insensitive substrings), no_text,
+# from/to dates, max_amount and min_per_day; flag = true flags and tags the documents of its lines (K1, P7).
+# The first rule that hits wins, so order by priority.
+# Below is one stub per revenue and expense account; uncomment the ones to use and fill in their keywords.
+
+{{stubs}}
+
+[coalesce.cash]
+max_days = 3
+max_gap  = 1
+
+[coalesce.mobilepay]
+max_days = 4
+max_gap  = 1
+
+[coalesce.fees]
+max_days = 7
+max_gap  = 7
+
+[posting]
+marker = "[kassakirja]"

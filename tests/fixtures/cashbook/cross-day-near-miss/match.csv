@@ -1,0 +1,5 @@
+book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note
+4;2026-09-19;Neuvosto (koko viikonloppu);18,00;KÄT;cash;;;
+4;2026-09-19;Neuvosto (koko viikonloppu);42,00;MP;M4;3001+3006;42,00;
+4;2026-09-20;Vuodenpyörä (koko viikonloppu);21,00;KÄT;cash;;;
+4;2026-09-20;Vuodenpyörä (koko viikonloppu);44,00;MP;M5;3002+3003+3004+3005;43,83;contradiction: MobilePay wins

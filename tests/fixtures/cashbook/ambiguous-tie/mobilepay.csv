@@ -1,0 +1,6 @@
+Päivämäärä,Nimi,Tyyppi,Numero,Viesti,Summa,Valuutta,Maksutapa,Tapahtumatunnus
+01/08/2026 16:00,A A,Henkilö,,Tanssit,4,EUR,Maksa Lippaaseen,4001
+01/08/2026 16:10,B B,Henkilö,,,6,EUR,Maksa Lippaaseen,4002
+01/08/2026 16:20,C C,Henkilö,,Tanssit,3,EUR,Maksa Lippaaseen,4003
+01/08/2026 16:30,D D,Henkilö,,,7,EUR,Maksa Lippaaseen,4004
+02/08/2026 10:00,E E,Henkilö,,Tilitys,-15,EUR,Tilitys,4005

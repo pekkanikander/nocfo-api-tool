@@ -14,6 +14,7 @@
     <Compile Include="Tools.fs" />
     <Compile Include="Arguments.fs" />
     <Compile Include="BlueprintJson.fs" />
+    <Compile Include="Record.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
@@ -23,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../cashbook/cashbook.fsproj" />
     <ProjectReference Include="../hawaii-client/hawaii-client.fsproj" />
   </ItemGroup>
 

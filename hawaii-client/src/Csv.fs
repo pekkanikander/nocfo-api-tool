@@ -340,14 +340,13 @@ module Csv =
       None
     else
       let rawTrimmed = rawText.Trim()
+      let parts =
+        rawText.Split(';')
+        |> Array.map (fun s -> s.Trim())
+        |> Array.filter (fun s -> s <> "")
 
       let valueObj : obj =
         if isStringCollectionType ft && not (rawTrimmed.StartsWith("[") || rawTrimmed.StartsWith("{")) then
-          let parts =
-            rawText.Split(';')
-            |> Array.map (fun s -> s.Trim())
-            |> Array.filter (fun s -> s <> "")
-
           if ft.IsArray then
             parts :> obj
           elif ft.IsGenericType && ft.GetGenericTypeDefinition() = typedefof<list<_>> then
@@ -361,8 +360,10 @@ module Csv =
             listObj
           else
             parts :> obj
-        elif isCollectionType ft then
+        elif isCollectionType ft && rawTrimmed.StartsWith("[") then
           deserializeUntyped rawText ft
+        elif isCollectionType ft then
+          deserializeUntyped ("[" + String.concat "," parts + "]") ft
         else
           failwithf "CSV collection field '%s' has unsupported type '%s'." fieldName ft.FullName
 
@@ -398,14 +399,17 @@ module Csv =
   /// empty cell as a silent no-op is what made D11 invisible, so it is reported instead.
   let private clearedOptionValue (fieldName: string) (ft: Type) : obj =
     let innerType = ft.GetGenericArguments().[0]
-    if innerType <> typeof<string> then
-      raise (CsvFormatException (sprintf "Column '%s' is empty, which means 'clear this field', but a value of type %s cannot be cleared. Drop the column to leave the field unchanged."
-        fieldName
-        innerType.FullName))
+    let cleared =
+      if innerType = typeof<string> then box ""
+      elif isCollectionType innerType then deserializeUntyped "[]" innerType
+      else
+        raise (CsvFormatException (sprintf "Column '%s' is empty, which means 'clear this field', but a value of type %s cannot be cleared. Drop the column to leave the field unchanged."
+          fieldName
+          innerType.FullName))
     let someCase =
       FSharpType.GetUnionCases(ft, true)
       |> Array.find (fun c -> c.Name = "Some")
-    FSharpValue.MakeUnion(someCase, [| box "" |], true)
+    FSharpValue.MakeUnion(someCase, [| cleared |], true)
 
   /// `emptyClears` distinguishes the two readers: in a PATCH the columns present are exactly
   /// the fields the caller is speaking about, so an empty cell clears; elsewhere a record is

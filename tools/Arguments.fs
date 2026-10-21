@@ -24,6 +24,8 @@ type EntitiesArgs =
     | [< NoPrefix; SubCommand >]                  Accounts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Contacts of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<BusinessScopedArgs>
+    | [< SubCommand; CustomCommandLine("tags") >] BusinessTags of ParseResults<BusinessScopedArgs>
+    | [< NoPrefix; SubCommand >]                  Files of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Businesses of ParseResults<BusinessesArgs>
     interface IArgParserTemplate with
         member this.Usage =
@@ -32,6 +34,8 @@ type EntitiesArgs =
             | Accounts _   -> "Accounts of a business."
             | Contacts _   -> "Contacts of a business."
             | Documents _  -> "Documents of a business."
+            | BusinessTags _ -> "Tags of a business."
+            | Files _      -> "Files of a business (list and delete only)."
             | Businesses _ -> "Businesses."
 
 [<RequireSubcommand>]
@@ -60,6 +64,7 @@ type CreateEntitiesArgs =
     | [< NoPrefix; SubCommand >]                  Accounts  of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Contacts  of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Documents of ParseResults<DocumentCreateArgs>
+    | [< SubCommand; CustomCommandLine("tags") >] BusinessTags of ParseResults<BusinessScopedArgs>
     | [< NoPrefix; SubCommand >]                  Businesses of ParseResults<BusinessesArgs>
     interface IArgParserTemplate with
         member this.Usage =
@@ -68,6 +73,7 @@ type CreateEntitiesArgs =
             | Accounts _   -> "Create accounts from CSV input."
             | Contacts _   -> "Create contacts from CSV input."
             | Documents _  -> "Create documents from CSV input."
+            | BusinessTags _ -> "Create tags from CSV input."
             | Businesses _ -> "Create businesses from CSV input."
 
 type BalanceArgs =
@@ -127,6 +133,84 @@ type StatementArgs =
             | Charset _  -> "Character set of the statement: auto (default), ascii-fi, latin1 or utf8."
             | Fields _   -> "Comma-separated list of columns to emit (default: all)."
 
+type CashbookCheckArgs =
+    | [< AltCommandLine("-b"); Mandatory >]       BusinessId of string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | BusinessId _ -> "Business identifier (Y-tunnus|VAT-code)."
+            | Rules _      -> "The rules.toml to check."
+
+type CashbookMatchArgs =
+    | [< AltCommandLine("-k"); Mandatory >]       CashBook of path: string
+    | [< AltCommandLine("-m"); Mandatory >]       MobilePay of path: string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | CashBook _  -> "The cash book (kassakirja.csv)."
+            | MobilePay _ -> "The MobilePay Box export (CSV)."
+            | Rules _     -> "The rules.toml whose [mobilepay] and [matching] tables to match by."
+            | DateFrom _  -> "Earliest date of the book lines and transactions to match (YYYY-MM-DD)."
+            | DateTo _    -> "Latest date of the book lines and transactions to match (YYYY-MM-DD)."
+
+type CashbookPlanArgs =
+    | [< AltCommandLine("-k"); Mandatory >]       CashBook of path: string
+    | [< AltCommandLine("-m"); Mandatory >]       MobilePay of path: string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
+    | Match of path: string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | CashBook _  -> "The cash book (kassakirja.csv)."
+            | MobilePay _ -> "The MobilePay Box export (CSV)."
+            | Rules _     -> "The rules.toml to classify and coalesce by."
+            | Match _     -> "A match.csv whose tiers and transactions to take as given instead of matching afresh."
+            | DateFrom _  -> "Earliest date of the book lines and transactions to plan (YYYY-MM-DD)."
+            | DateTo _    -> "Latest date of the book lines and transactions to plan (YYYY-MM-DD)."
+
+type CashbookRecordArgs =
+    | [< AltCommandLine("-b"); Mandatory >]       BusinessId of string
+    | [< AltCommandLine("-k"); Mandatory >]       CashBook of path: string
+    | [< AltCommandLine("-m"); Mandatory >]       MobilePay of path: string
+    | [< AltCommandLine("-r"); Mandatory >]       Rules of path: string
+    | Match of path: string
+    | [< CustomCommandLine("--from") >]           DateFrom of string
+    | [< CustomCommandLine("--to") >]             DateTo of string
+    | Force
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | BusinessId _ -> "Business identifier (Y-tunnus|VAT-code)."
+            | CashBook _   -> "The cash book (kassakirja.csv)."
+            | MobilePay _  -> "The MobilePay Box export (CSV)."
+            | Rules _      -> "The rules.toml to match, classify and coalesce by."
+            | Match _      -> "A match.csv whose tiers and transactions to take as given instead of matching afresh."
+            | DateFrom _   -> "Earliest date of the book lines and transactions to record (YYYY-MM-DD)."
+            | DateTo _     -> "Latest date of the book lines and transactions to record (YYYY-MM-DD)."
+            | Force        -> "Drop the malformed rows and leave the book-only lines unrecorded instead of recording nothing."
+
+[<RequireSubcommand>]
+type CashbookArgs =
+    | [< NoPrefix; SubCommand >]                  Seed of ParseResults<BusinessScopedArgs>
+    | [< NoPrefix; SubCommand >]                  Check of ParseResults<CashbookCheckArgs>
+    | [< NoPrefix; SubCommand >]                  Match of ParseResults<CashbookMatchArgs>
+    | [< NoPrefix; SubCommand >]                  Plan of ParseResults<CashbookPlanArgs>
+    | [< NoPrefix; SubCommand >]                  Record of ParseResults<CashbookRecordArgs>
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Seed _   -> "Write a rules.toml skeleton from the chart of accounts."
+            | Check _  -> "Check a rules.toml against the chart of accounts."
+            | Match _  -> "Match the cash book against a MobilePay Box export and write match.csv."
+            | Plan _   -> "Plan the documents of the cash book and a MobilePay Box export and write plan.csv."
+            | Record _ -> "Match, plan and record the documents of the cash book and a MobilePay Box export as drafts."
+
 [<RequireSubcommand>]
 type CliArgs =
     | [< AltCommandLine("-o"); Inherit >]         Out     of outPath: string
@@ -142,6 +226,7 @@ type CliArgs =
     | [< NoPrefix; SubCommand >]                  Balance of ParseResults<BalanceArgs>
     | [< NoPrefix; SubCommand >]                  Reconcile of ParseResults<ReconcileArgs>
     | [< NoPrefix; SubCommand >]                  Statement of ParseResults<StatementArgs>
+    | [< NoPrefix; SubCommand >]                  Cashbook of ParseResults<CashbookArgs>
     interface IArgParserTemplate with
         member this.Usage =
             match this with
@@ -158,3 +243,4 @@ type CliArgs =
             | Balance _    -> "Rolling balance of an account over a period."
             | Reconcile _  -> "Compare the daily balances of two sources."
             | Statement _  -> "Dump the transactions of a bank statement (.nda) as CSV."
+            | Cashbook _   -> "Prepare and upload a cash book."

@@ -37,12 +37,11 @@
             }
           }
         },
-        "AttachmentInstance": {
+        "AttachmentAnalysis": {
           "properties": {
-            "analysis_results": {
-              "type": "string",
+            "analysis_data": {
               "nullable": true,
-              "description": "Workaround: file retrieve responses currently include AttachmentAnalysis.analysis_data as null even though the spec models it as required/non-null, so this field stays downgraded to avoid deserialization failures."
+              "description": "Workaround: the API returns null here although the spec models the field as required and non-null."
             }
           }
         }

@@ -132,8 +132,24 @@ type DocumentCreatePayload =
   { date: string option
     description: string option
     is_draft: bool option
+    is_flagged: bool option
     ``type``: JsonElement option
-    blueprint: JsonElement option }
+    blueprint: JsonElement option
+    attachment_ids: int list option
+    tag_ids: int list option }
+
+/// An entry of a document blueprint, its amount in euros kept `decimal` up to the wire; the generated
+/// `BlueprintEntryRequest` carries `float32`.
+type BlueprintEntry =
+  { account_id: int
+    amount: decimal }
+
+/// A document blueprint: the account on one side, the entries on the other.
+type Blueprint =
+  { debet_account_id: int option
+    debet_entries: BlueprintEntry list
+    credit_account_id: int option
+    credit_entries: BlueprintEntry list }
 
 [<CLIMutable>]
 type DocumentDelta =
@@ -150,6 +166,26 @@ type DocumentResult =
   | DocumentCreated  of DocumentFull
   | DocumentUpdated  of DocumentFull
   | DocumentDeleted  of int
+
+/// ------------------------------------------------------------
+/// Attachments
+/// ------------------------------------------------------------
+
+type AttachmentFull = NocfoApi.Types.AttachmentInstance
+type AttachmentRow  = NocfoApi.Types.AttachmentList
+
+/// A file for `POST /file_upload/`, its content base64-encoded; the attachment it becomes is attached to a
+/// document by its id.
+type FileUploadPayload =
+  { name: string
+    ``type``: string
+    file: string }
+
+type AttachmentCommand =
+  | DeleteAttachment of attachmentId:int
+
+type AttachmentResult =
+  | AttachmentDeleted of int
 
 /// ------------------------------------------------------------
 /// Contacts
@@ -184,6 +220,37 @@ type ContactResult =
   | ContactCreated of ContactFull
   | ContactUpdated of ContactFull
   | ContactDeleted of int
+
+/// ------------------------------------------------------------
+/// Tags
+/// ------------------------------------------------------------
+
+type TagFull  = NocfoApi.Types.Tag
+type TagRow   = NocfoApi.Types.Tag
+
+[<CLIMutable>]
+type TagDelta =
+  { id: int; patch: NocfoApi.Types.PatchedTagRequest }
+  with
+    static member Create (id: int, patch: NocfoApi.Types.PatchedTagRequest) =
+      { id = id; patch = patch }
+
+type Tag      = Hydratable<TagFull, TagRow>
+
+[<CLIMutable>]
+type TagCreatePayload =
+  { name: string
+    description: string option
+    color: string option }
+
+type TagCommand =
+  | CreateTag of TagCreatePayload
+  | DeleteTag of tagId:int
+
+type TagResult =
+  | TagCreated of TagFull
+  | TagUpdated of TagFull
+  | TagDeleted of int
 
 /// ------------------------------------------------------------
 /// Mapping output DTOs
@@ -452,6 +519,14 @@ module Ledger =
       context.ctx.http (Endpoints.ledgerReport context.key.slug) request
     |> AsyncResult.mapError DomainError.Http
 
+module Attachment =
+  /// The file stored as an attachment, to be attached to a document by its id. Unlike the commands it does
+  /// not honour `dryRun`: the caller must not get here with it set, since no attachment id can be made up.
+  let upload (context: BusinessContext) (payload: FileUploadPayload) : Async<Result<AttachmentFull, DomainError>> =
+    Http.postJson<FileUploadPayload, AttachmentFull>
+      context.ctx.http (Endpoints.fileUpload context.key.slug) payload
+    |> AsyncResult.mapError DomainError.Http
+
 ///
 /// Document module operations
 ///
@@ -491,6 +566,26 @@ module Contact =
   let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<ContactDelta, DomainError>>) =
     EntityOps.executeDeltaUpdates
       Endpoints.contactById ContactUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
+
+///
+/// Tag module operations
+///
+
+module Tag =
+  let private missingTagError (id: int) =
+    DomainError.Unexpected $"Alignment failure: missing tag for CSV id {id}."
+
+  let ofRaw (raw: TagFull) : Tag =
+    Hydratable.Full raw
+
+  let fetchFull = EntityOps.fetchById Endpoints.tagById missingTagError
+
+  let diffToPatch : TagFull -> TagDelta -> Result<PatchedTagRequest option, DomainError> =
+    EntityOps.diffToPatch "tag" (fun t -> t.id) (fun d -> d.id) (fun d -> d.patch)
+
+  let executeDeltaUpdates (context: BusinessContext) (deltas: AsyncSeq<Result<TagDelta, DomainError>>) =
+    EntityOps.executeDeltaUpdates
+      Endpoints.tagById TagUpdated context fetchFull diffToPatch (fun d -> d.id) deltas
 
 ///
 /// Streams module operations —— maybe to be folded to the previous modules
@@ -546,10 +641,30 @@ module Streams =
        (fun page -> Endpoints.documentsBySlugPage context.key.slug page)
     |> toDomain id
 
+  /// The document rows dated within the period, both ends inclusive.
+  let streamDocumentRowsDated (context: BusinessContext) (dateFrom: string) (dateTo: string)
+    : AsyncSeq<Result<DocumentRow, DomainError>> =
+    Streams.streamPaginated<PaginatedDocumentListList, DocumentFull>
+       context.ctx.http
+       (fun page -> Endpoints.documentsBySlugDatedPage context.key.slug dateFrom dateTo page)
+    |> toDomain id
+
   let streamContactRows (context: BusinessContext) : AsyncSeq<Result<ContactRow, DomainError>> =
     Streams.streamPaginated<PaginatedContactList, ContactFull>
        context.ctx.http
        (fun page -> Endpoints.contactsBySlugPage context.key.slug page)
+    |> toDomain id
+
+  let streamTagRows (context: BusinessContext) : AsyncSeq<Result<TagRow, DomainError>> =
+    Streams.streamPaginated<PaginatedTagList, TagFull>
+       context.ctx.http
+       (fun page -> Endpoints.tagsBySlugPage context.key.slug page)
+    |> toDomain id
+
+  let streamAttachmentRows (context: BusinessContext) : AsyncSeq<Result<AttachmentRow, DomainError>> =
+    Streams.streamPaginated<PaginatedAttachmentListList, AttachmentRow>
+       context.ctx.http
+       (fun page -> Endpoints.filesBySlugPage context.key.slug page)
     |> toDomain id
 
   /// Domain-level stream of accounts for a given business, yielding lazy Partials
@@ -564,6 +679,10 @@ module Streams =
   /// Domain-level stream of contacts for a given business.
   let streamContacts (context: BusinessContext) : AsyncSeq<Result<Contact, DomainError>> =
     streamContactRows context |> AsyncSeq.map (Result.map Contact.ofRaw)
+
+  /// Domain-level stream of tags for a given business.
+  let streamTags (context: BusinessContext) : AsyncSeq<Result<Tag, DomainError>> =
+    streamTagRows context |> AsyncSeq.map (Result.map Tag.ofRaw)
 
 
   let hydrateAndUnwrap<'Full, 'Partial>
@@ -692,6 +811,49 @@ module Streams =
           fun () ->
             Http.deleteJson<unit> context.ctx.http (Endpoints.contactById context.key.slug (string id))
             |> AsyncResult.map (fun () -> ContactDeleted id)
+
+    executeCommands context formatDryRun mapToOperation commands
+
+  let executeTagCommands
+    (context: BusinessContext)
+    (commands: AsyncSeq<Result<TagCommand, DomainError>>)
+    : AsyncSeq<Result<TagResult, DomainError>> =
+
+    let formatDryRun = function
+      | TagCommand.CreateTag payload ->
+          sprintf "POST %s %s"
+            (Endpoints.tagsBySlug context.key.slug)
+            (serializeUntyped payload)
+      | TagCommand.DeleteTag id ->
+          sprintf "DELETE %s" (Endpoints.tagById context.key.slug (string id))
+
+    let mapToOperation = function
+      | TagCommand.CreateTag payload ->
+          fun () ->
+            Http.postJson<TagCreatePayload, TagFull>
+              context.ctx.http (Endpoints.tagsBySlug context.key.slug) payload
+            |> AsyncResult.map TagCreated
+      | TagCommand.DeleteTag id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.tagById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> TagDeleted id)
+
+    executeCommands context formatDryRun mapToOperation commands
+
+  let executeAttachmentCommands
+    (context: BusinessContext)
+    (commands: AsyncSeq<Result<AttachmentCommand, DomainError>>)
+    : AsyncSeq<Result<AttachmentResult, DomainError>> =
+
+    let formatDryRun = function
+      | AttachmentCommand.DeleteAttachment id ->
+          sprintf "DELETE %s" (Endpoints.fileById context.key.slug (string id))
+
+    let mapToOperation = function
+      | AttachmentCommand.DeleteAttachment id ->
+          fun () ->
+            Http.deleteJson<unit> context.ctx.http (Endpoints.fileById context.key.slug (string id))
+            |> AsyncResult.map (fun () -> AttachmentDeleted id)
 
     executeCommands context formatDryRun mapToOperation commands
 
