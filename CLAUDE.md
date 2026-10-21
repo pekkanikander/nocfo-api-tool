@@ -280,5 +280,3 @@ Both `config/config.toml` and `config/fixture.env` are gitignored and must be cr
   "Architectural Direction" section of `ROADMAP.md`. `paginateByPageSRTP` is the reference example.
 - Amounts from the API are `float32`/`double`. Convert to `decimal` before any accumulation or
   comparison — never fold money in floating point.
-- Do not commit anything under `tmp/`: it is *not* gitignored and currently holds a real bank
-  statement with personal data.

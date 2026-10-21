@@ -6,7 +6,7 @@ item to an offset account by the rules in a `rules.toml`, matches the cash book 
 export so that a MobilePay payment is never posted twice, coalesces the items of consecutive days
 into one document each, and records the documents as drafts, each with a text listing of its rows
 attached. Anything it is unsure of is still recorded, but flagged and tagged in NoCFO, where the
-correction is made.
+correction (if any) is then made by the accountant.
 
 What is posted:
 
