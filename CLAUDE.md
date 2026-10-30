@@ -196,7 +196,7 @@ document becomes) → `Program.fs`.
 
 ---
 
-## Known Limitations & TODOs (as of August 2026)
+## Known Limitations & TODOs (as of October 2026)
 
 - Generated code is **checked in** — regeneration is a manual step when the API spec changes.
 - API coverage: businesses, accounts, contacts, documents, tags, and the ledger report. Not covered:
@@ -228,7 +228,7 @@ Two layers.
 ### 1. xUnit unit tests (`tests/`)
 
 ```bash
-dotnet test tests     # 230 tests
+dotnet test tests     # 231 tests
 ```
 
 Framework: **xUnit** with **Unquote** for assertions (`test <@ expr @>`).

@@ -1,7 +1,8 @@
 # PLAN — Phase 5: Broader API coverage
 
 Written 2026-08-06 against `api/openapi.json` (73 paths / 159 schemas, Apr 2026 revision).
-Status: **plan only, nothing implemented.**
+Status: **tranches A and B not started.** Tranche C (tags) and the file upload, list and
+delete were done in October 2026 for the cash-book work (`88f21c1`, `949e59a`).
 
 ---
 
@@ -11,7 +12,8 @@ This supersedes the inventory in `ROADMAP.md` Phase 5, which predates the Apr 20
 growth and the rolling-balance work.
 
 **Covered**: businesses, accounts, contacts, documents, tags — full create/list/update/delete —
-plus `map accounts`, and `POST /report/ledger/` via `balance` / `reconcile` (with TITO and
+plus files (`file_upload/` with base64 content, `files/` list and delete; since 2026-10),
+`map accounts`, and `POST /report/ledger/` via `balance` / `reconcile` (with TITO and
 CSV comparison sources).
 
 **Not covered**, grouped by kind:
@@ -22,7 +24,7 @@ CSV comparison sources).
 | periods | `period/` CRUD | `Period`, `PaginatedPeriodList` generated |
 | entries | `document/{id}/entry/` | read-only, N+1 by construction |
 | small entities | `identifiers/`, `headers/`, `vat_period/` | plain CRUD |
-| files | `files/`, `file_upload/`, document `attach_files`/`set_files`/`detach_files` | multipart — the one genuinely new mechanism |
+| files | document `attach_files`/`set_files`/`detach_files` | `file_upload/` (JSON with base64 content, no multipart) and `files/` list and delete are done; attaching to an existing document is not |
 | document actions | `lock`/`unlock`, `flag`/`unflag`, `copy`, relations, suggestions | POST actions, no CSV shape |
 | invoicing | `invoice/` (+7 actions), `product/`, `purchase_invoice/` | a whole subtree, new in the Apr 2026 spec |
 | misc | `constants/*`, `me/permissions/`, `user/`, `auth/jwt/` | reference data / identity |
@@ -116,6 +118,9 @@ Small: one stream, one resolver function, an Argu case shared by three verbs.
 
 ## 5. Tranche C — tags (optional, the SRTP litmus test)
 
+**Done** 2026-10-05 (`88f21c1`): full CRUD for tags, and `tag_ids` carried through the
+documents CSV. The rationale, kept for the record:
+
 `Tag` is the smallest entity in the API (`name`, `description`, `color`). Implementing
 full CRUD for it is less about tags — the need is speculative — and more about
 **measuring** ROADMAP's central claim that a new entity now costs "a type definition and
@@ -131,9 +136,10 @@ measurement isn't wanted.
   in one request; `/entry/` is N+1; and as a *verification* source Route B is weaker than
   hoped, since the journal is computed by the same server as the ledger. Revisit only if
   entry-level reconciliation (the old L2) becomes a need.
-- **Files / attachments** — needs `Http.postMultipart`, the only new transport mechanism
-  in the API. Well-bounded (`file_upload` → id → `action/set_files/`), but build it against
-  a concrete workflow, not speculatively.
+- **Attaching files to existing documents** (`action/set_files/` and kin) — the upload itself
+  turned out to be plain JSON with base64 content and was built for `cashbook record`
+  (2026-10-06, `949e59a`), together with `list files` and `delete files`; attaching after
+  the fact still waits for a concrete workflow.
 - **Document actions** (lock, flag, copy, relations) — no CSV shape, no demonstrated need.
 - **Invoicing subtree** — large (16 paths, its own URL prefix), and nothing in current
   usage touches it. If invoice export ever becomes a need, it is a Phase 6 of its own.
@@ -158,7 +164,7 @@ measurement isn't wanted.
    accounting-report fold.
 3. `report vat`.
 4. `list periods` + `--period` on the three date-taking verbs.
-5. Tags, if the litmus test is wanted.
+5. ~~Tags, if the litmus test is wanted.~~ Done.
 
 ---
 

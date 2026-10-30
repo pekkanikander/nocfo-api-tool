@@ -208,7 +208,8 @@ Setup:
 Run it explicitly with:
 
 ```bash
-make test-online
+make test-online   # the read-only cases
+make test-mutate   # the mutation cases, cashbook record among them
 ```
 
 ## Releases

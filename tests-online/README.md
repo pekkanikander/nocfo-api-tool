@@ -34,7 +34,8 @@ the `online-test` profile and could aim the mutation tests at production.
 ## Run
 
 ```bash
-make test-online
+make test-online   # the read-only cases
+make test-mutate   # the mutation cases, cashbook record among them
 ```
 
 Each test captures stdout and stderr into a temporary artifact directory, prints a compact

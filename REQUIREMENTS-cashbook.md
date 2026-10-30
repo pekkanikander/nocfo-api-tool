@@ -112,7 +112,7 @@ the summary posting is a permitted combined entry.
 | P5 | Idempotency: recording an unchanged plan again changes nothing in NoCFO; when the plan changes, the documents in NoCFO change with it. Overlapping exports are handled by I5. Drafts and finalised documents are told apart, and nothing is deleted. First version (agreed 2026-10-06), for the run repeated after a correction: `record` lists the business's documents dated within the plan's range (`date_from`/`date_to`) whose description starts with the marker; a planned document equal to one of them in date, payment account, offset account, amount and description is not created again, the rest are created, and the marker drafts no planned document claimed are listed on stderr; nothing is modified or deleted, a finalised document least of all. *Still open:* how a changed row is reconciled with the document it once produced. | P |
 | P6 | Personal names (`Nimi`, and any payer/payee name the cash book might carry) never reach a generated CSV file (`match.csv`, `plan.csv`): those are reviewable, diffable, and may end up committed as test fixtures. They do reach the NoCFO document itself (I8, I3, P10, P11), where NoCFO's own matching and search can use them; that is wanted, not merely tolerated. | A |
 | P7 | A document whose lines carry any reason tag is posted flagged (`is_flagged = true`) and carrying those tags (`tag_ids`), one per distinct reason: `flagged` (K1), `unclassified` (K7), `unknown-type` (I6), `assumed-cash` (M9), `ambiguous` (M8), `unmarked-expense` (M10), `mp-expense-unbooked` (M11). Tag names are the bare reason codes, found or created once per run in the target business; a run never creates the same tag twice, and the API refuses a duplicate name anyway (verified). `possible-mp` and `book-only` are never tags: they carry no document to flag (M7, M6). | P |
-| P8 | `record` is the one command for ordinary use: it matches, plans and posts in a single run against a business. With `--dry-run` it prints `plan.csv` instead of posting. `match` and `plan` remain as offline previews needing no network; `--match` on either takes a `match.csv` as given instead of matching afresh, for the rare case the automatic match needs correcting by hand. | P |
+| P8 | `record` is the one command for ordinary use: it matches, plans and posts in a single run against a business. With `--dryrun` (`-n`) it prints `plan.csv` instead of posting. `match` and `plan` remain as offline previews needing no network; `--match` on either takes a `match.csv` as given instead of matching afresh, for the rare case the automatic match needs correcting by hand. | P |
 | P9 | Exit status and `--force`: a row the tool itself cannot resolve (I2, I7) is an input error like any other malformed row (a bad date, a bad amount); an MP-marked book line MobilePay does not cover (M6) is a data inconsistency with no document to carry it. Either kind stops the run with exit status 65 (`EX_DATAERR`) and blocks the upload by default; `--force` drops just the offending rows, each named on stderr — M6's stay unposted exactly as they already are — and uploads the rest. Nothing resolved instead by flagging and tagging a draft in NoCFO (K1, K7, I6, M8, M9, M10, M11) ever affects the exit status, since that work happens there, not at the CLI; nor does `possible-mp` (M7), which needs no flag at all since the amount posted is already correct. A malformed header, a malformed rules file, a missing V2 account, or a malformed or inconsistent `--match` file stops the run regardless of `--force`: there is no single row to drop and no safe default to fall back on. | P |
 | P10 | A book line's `huom`, when present, reaches NoCFO on its row's line in the attached listing of the document it posts into (P12). A MobilePay transaction has no equivalent field. | P |
 | P11 | A MobilePay transaction's `Nimi`, when present, reaches NoCFO the same way: on its row's line in the attached listing (P12). A book line has no equivalent field. | P |
@@ -125,7 +125,7 @@ the summary posting is a permitted combined entry.
 | R1 | `match.csv`: `book_page;book_date;book_text;book_amount;book_tapa;tier;mp_ids;mp_sum;note`, one row per book line in file order. `book_amount` is signed (expenses negative). Tiers: `M1`–`M5`, `cash`, `book-only`, `ambiguous`. `mp_ids` is `+`-joined: the transactions matched, or for an `ambiguous` line those of its equally cheap subsets (M8). Notes: `contradiction` (M5), `possible-mp` (M7), `assumed-cash` (M9), `unmarked-expense` (M10), `outside-export` (M6). | P |
 | R2 | *Withdrawn: every item needing attention is flagged and tagged on its own draft in NoCFO instead (K1, K7, I6, M8, M9, M10, M11); see P7 and R4.* | — |
 | R3 | Amounts are `decimal` end to end (house rule). | A |
-| R4 | The run ends with a summary on stderr: one line per tag of P7 with its non-zero count of documents this run, and one line per `book-only` and `possible-mp` book line (M6, M7), naming it by page, date and amount, since `record` writes no `match.csv` to hold the detail. A `book-only` line is why the run exits non-zero (M6, P9); a `possible-mp` line never affects the exit status (M7). Nothing here is written to a file; the detail is in the possibly flagged, tagged document drafts themselves, or in the `plan.csv` output for a `--dry-run`. | P |
+| R4 | The run ends with a summary on stderr: one line per tag of P7 with its non-zero count of documents this run, and one line per `book-only` and `possible-mp` book line (M6, M7), naming it by page, date and amount, since `record` writes no `match.csv` to hold the detail. A `book-only` line is why the run exits non-zero (M6, P9); a `possible-mp` line never affects the exit status (M7). Nothing here is written to a file; the detail is in the possibly flagged, tagged document drafts themselves, or in the `plan.csv` output of a dry run (`-n`). | P |
 
 ## 7. Rules file
 
@@ -135,24 +135,24 @@ the summary posting is a permitted combined entry.
 | V2 | Every account number in the file, payment, fee and clearing accounts and rule accounts alike, must exist in the business. `cashbook check` verifies this against the live accounts list and warns where the NoCFO account name differs from the `name` in the file. `record` runs the same check first and refuses on any missing account. | I |
 | V3 | `cashbook seed` writes a rules file skeleton from the live accounts list: the payment, fee and clearing accounts left blank, and one commented-out rule stub per revenue and expense account with empty keywords, in account-number order. Keyword inference from examples is not algorithmic; keywords are written by hand, or later derived from corrected `match.csv`/`plan.csv` files. | I |
 
-## 8. CLI surface (proposed)
+## 8. CLI surface (implemented 2026-10-06)
 
 ```
-nocfo cashbook match   -k kassakirja.csv -m mobilepay.csv [-r rules.toml] [--from --to]                      → match.csv
-nocfo cashbook plan    -k ... -m ... [-r ...] [--match match.csv] [--from --to]                               → plan.csv
-nocfo cashbook record  -b <slug> -k ... -m ... [-r ...] [--match match.csv] [--from --to] [--dry-run] [--force]
+nocfo cashbook match   -k kassakirja.csv -m mobilepay.csv -r rules.toml [--from --to]                        → match.csv
+nocfo cashbook plan    -k ... -m ... -r ... [--match match.csv] [--from --to]                                 → plan.csv
+nocfo [-n] cashbook record  -b <slug> -k ... -m ... -r ... [--match match.csv] [--from --to] [--force]
 nocfo cashbook check   -b <slug> -r rules.toml                                                                → report, exit code
 nocfo cashbook seed    -b <slug>                                                                              → rules.toml skeleton
 ```
 
 `match` and `plan` need no network and remain offline previews; `check`, `seed` and `record` do. `record` is
 the one command for ordinary use (P8): it matches, plans and posts in a single run, printing `plan.csv`
-instead of posting when `--dry-run` is given. Like `plan`, it re-runs the matching unless `--match` supplies
+instead of posting under the global `--dryrun` (`-n`) flag. Like `plan`, it re-runs the matching unless `--match` supplies
 a (possibly hand-corrected) `match.csv`; the tiers and `mp_ids` in it are taken as given. A book line is
 posted only at tier `cash`, so a cash-marked line given an M-tier by hand becomes a hint like an MP-marked
 one and its money is not posted twice. Exit status and `--force` are P9: `match` and `plan` end with the R4
 summary as well but exit 0 on anything they could read, since the summary and the CSV are their whole point;
-`record --dry-run` exits as the upload would have. `record` uses the existing profile and verbose flags.
+`record` under `-n` exits as the upload would have. `record` uses the existing profile and verbose flags.
 
 ## 9. Open questions
 

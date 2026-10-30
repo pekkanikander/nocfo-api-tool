@@ -4,7 +4,8 @@ Thin Argu-based CLI built on top of the shared `hawaii-client` library.
 
 Treat this as the user-facing path for listing businesses/accounts/contacts/documents/tags/files,
 updating accounts, contacts and tags from CSV, deleting accounts/contacts/documents/tags/files,
-mapping account IDs between environments, and creating tags and minimal documents from CSV.
+mapping account IDs between environments, creating tags and minimal documents from CSV,
+rolling balances and bank reconciliation, and posting a cash book (`cashbook`).
 
 ## Quick start
 
